@@ -1,0 +1,7 @@
+{
+  "_comment": "The single source of truth for versions. flake.nix reads it (for pysail) and build.sbt reads it (for Spark). The Spark client and the Sail server have to stay paired: Sail picks its Spark configuration from the client version. `testkit` is the JVM-side launcher, released on Maven Central, so it needs no resolver.",
+  "scala": "2.13.18",
+  "spark": "4.2.0",
+  "pysail": "0.7.0",
+  "testkit": "0.1.0-M1"
+}

@@ -1,0 +1,26 @@
+name: update-flake-lock
+
+# Neither Dependabot nor Scala Steward looks at flake.lock, so the Nix inputs
+# (nixpkgs, devshell) would stay frozen forever. This opens a PR running
+# `nix flake update`.
+on:
+  schedule:
+    - cron: "0 6 1 * *" # the 1st of every month
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - uses: DeterminateSystems/update-flake-lock@v24
+        with:
+          pr-title: "chore(nix): update flake.lock"
+          pr-labels: dependencies

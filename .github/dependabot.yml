@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Dependabot does NOT know about sbt: its JVM ecosystems are maven and gradle.
+  # Scala dependencies are handled by Scala Steward (see
+  # .github/workflows/scala-steward.yml). Only the Actions themselves go here.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
