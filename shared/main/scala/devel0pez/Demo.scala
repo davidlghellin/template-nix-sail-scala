@@ -18,11 +18,11 @@ object Demo {
     t2.show(truncate = false)
 
     val output = BaseCase.etl(t1, t2, BaseCase.Cutoff, BaseCase.Audit)
-    println("== output conformada a TABLE_OUT ==")
+    println("== output conformed to TABLE_OUT ==")
     output.show(truncate = false)
     output.printSchema()
 
-    println("== add de columnas ==")
+    println("== summed columns ==")
     val numbers = spark.range(1, 4).selectExpr("id as a", "id * 10 as b")
     DataFrames.sumColumns(numbers, "a", "b", "total").show(truncate = false)
 
