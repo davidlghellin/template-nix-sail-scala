@@ -1,0 +1,48 @@
+name: test
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The same tests against both engines: classic Spark on the JVM and
+        # Sail over Spark Connect. That the two agree is the whole point of this
+        # template, so neither may be left unrun.
+        backend: [classic, connect]
+    name: test (${{ matrix.backend }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      # Without this, every run downloads the whole of Spark again (~300 MB).
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt
+          key: sbt-${{ runner.os }}-${{ hashFiles('build.sbt', 'versions.json', 'project/build.properties') }}
+          restore-keys: sbt-${{ runner.os }}-
+      # The Sail server venv depends only on the declared versions.
+      - uses: actions/cache@v4
+        with:
+          path: .venv-sail
+          key: sail-${{ runner.os }}-${{ hashFiles('versions.json') }}
+      - run: nix develop --command sbt -batch ${{ matrix.backend }}/test
+
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - run: nix develop --command scalafmt --test .

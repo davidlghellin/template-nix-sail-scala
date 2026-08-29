@@ -1,0 +1,24 @@
+name: scala-steward
+
+# The Scala dependency bot: it reads build.sbt and opens a PR for every new
+# version (Spark, ScalaTest, sbt itself and the plugins).
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Monday morning
+  workflow_dispatch: # and by hand when needed
+
+jobs:
+  scala-steward:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: scala-steward-org/scala-steward-action@v2
+        with:
+          # With the default GITHUB_TOKEN, the PRs the bot opens do NOT trigger
+          # workflows, so they would land without CI. With a PAT in the
+          # SCALA_STEWARD_TOKEN secret, they do. If it is missing, this falls
+          # back to the default token and the bot still works: CI just has to
+          # be launched by hand.
+          github-token: ${{ secrets.SCALA_STEWARD_TOKEN || secrets.GITHUB_TOKEN }}
+          author-email: davidlghellin@gmail.com
+          author-name: Scala Steward
