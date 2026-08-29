@@ -1,6 +1,6 @@
 # ⛵ dev-nix-sail-scala
 
-A Spark template on **Scala**, sibling to [`template-nix-sail`](../template-nix-sail)
+A Spark template on **Scala**, sibling to [`template-nix-sail`](https://github.com/davidlghellin/template-nix-sail)
 (the Python one, with PySpark and PySail). Same premise and same goal: Nix pins
 the environment, CI runs the tests against **both engines**, and the example
 code is shaped like a real ETL.
