@@ -167,8 +167,14 @@
             }
             {
               category = "env";
+              name = "check-commands";
+              help = "Smoke-test the commands in this menu";
+              command = ''"$PRJ_ROOT"/scripts/check-commands.sh'';
+            }
+            {
+              category = "env";
               name = "clean-all";
-              help = "Delete target/ and the sbt build cache";
+              help = "Delete every target/ and the sbt build cache";
               # Every target, not just the root's: the subprojects keep their own,
               # and leaving them behind made this look like it had run when it had
               # only half worked.

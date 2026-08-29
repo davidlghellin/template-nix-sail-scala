@@ -100,6 +100,7 @@ run-demo           # run the demo (classic; `run-demo connect` needs a server up
 sail-server        # a Sail server in the foreground on :50051, to poke at by hand
 fc                 # check formatting without rewriting (what CI runs)
 clean-all          # delete every target/ and the sbt build cache
+check-commands     # smoke-test the commands in this menu (CI runs it)
 ```
 
 `cscala` and `run-demo` name a backend because the root project only aggregates:

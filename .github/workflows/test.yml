@@ -45,4 +45,21 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+      # `check-commands` below compiles and starts a Spark session, so this job
+      # needs the same cache the test jobs use — the key is shared on purpose, so
+      # whichever job runs first pays for the download and the rest reuse it.
+      # Without it, adding the smoke test would have quietly cost every run a
+      # 300 MB download.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt
+          key: sbt-${{ runner.os }}-${{ hashFiles('build.sbt', 'versions.json', 'project/build.properties') }}
+          restore-keys: sbt-${{ runner.os }}-
       - run: nix develop --command scalafmt --test .
+      # Three devshell commands were broken and advertised for weeks: `run-demo`
+      # died on the root project, `cscala` opened a REPL with no Spark, and
+      # `clean-all` deleted three of five target directories. Nothing caught it
+      # because nothing ran them. This does.
+      - run: nix develop --command check-commands
