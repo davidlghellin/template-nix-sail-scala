@@ -28,6 +28,12 @@ object Plans {
   def count(plan: String, node: String): Int = node.r.findAllIn(plan).size
 
   private def capture(body: => Unit): String = {
+    // The `PrintStream` below is deliberately not closed. It wraps a
+    // `ByteArrayOutputStream`, whose own `close` is documented as having no
+    // effect, so there is no descriptor and nothing to release — and it is
+    // built with `autoFlush = true`, so there is nothing pending either.
+    // What does need care is `System.setOut`, which is process-wide; the
+    // `finally` restores it, and the suite runs single-threaded.
     val buffer = new ByteArrayOutputStream()
     val previous = System.out
     try {

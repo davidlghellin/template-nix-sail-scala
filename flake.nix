@@ -89,7 +89,7 @@
 
           # An override, not a default. sbt and Spark read JAVA_HOME before the
           # PATH, so a JAVA_HOME inherited from outside (SDKMAN, say) decides
-          # which JVM runs and this shell's jdk17 is never used. With an
+          # which JVM runs and this shell's jdk21 is never used. With an
           # inherited JDK 11, Spark 4 does not even compile.
           env = [
             { name = "JAVA_HOME"; value = jdk.home; }
