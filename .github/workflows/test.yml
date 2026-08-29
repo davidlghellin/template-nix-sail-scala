@@ -5,24 +5,37 @@ on:
     branches: [master, main]
   pull_request:
 
+# The shape is a graph rather than a flat list of jobs, and not for the picture.
+# Every job here starts by entering the same devshell and resolving the same
+# dependencies, so when they all start at once they all miss the cache at once
+# and each downloads Spark — about 300 MB, three times over, in parallel.
+#
+#   setup ──┬── test (classic)
+#           ├── test (connect)
+#           ├── format
+#           └── commands
+#
+# `setup` pays for the download once and saves the cache; everything downstream
+# restores it. It also means a broken lockfile or an unresolvable dependency
+# fails in one short job instead of in four long ones at the same time.
+#
+# What is deliberately *not* shared is compiled output. Passing `target/` between
+# jobs would save a compile, but sbt's incremental state does not travel well
+# between machines and a stale hit is worse than a cold build. The tests compile
+# their own.
+
 jobs:
-  test:
+  setup:
+    name: setup
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # The same tests against both engines: classic Spark on the JVM and
-        # Sail over Spark Connect. That the two agree is the whole point of this
-        # template, so neither may be left unrun.
-        backend: [classic, connect]
-    name: test (${{ matrix.backend }})
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      # Without this, every run downloads the whole of Spark again (~300 MB).
+      # Keyed on what actually determines the dependency set. `versions.json`
+      # is in the key because it is where Spark's version lives.
       - uses: actions/cache@v4
         with:
           path: |
@@ -35,21 +48,27 @@ jobs:
         with:
           path: .venv-sail
           key: sail-${{ runner.os }}-${{ hashFiles('versions.json') }}
-      - run: nix develop --command sbt -batch ${{ matrix.backend }}/test
+      # `update` resolves every dependency without compiling anything, which is
+      # exactly the work the downstream jobs would otherwise each repeat.
+      - run: nix develop --command sbt -batch update
 
-  checks:
+  test:
+    name: test (${{ matrix.backend }})
+    needs: setup
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The same tests against both engines: classic Spark on the JVM and
+        # Sail over Spark Connect. That the two agree is the whole point of this
+        # template, so neither may be left unrun.
+        backend: [classic, connect]
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      # `check-commands` below compiles and starts a Spark session, so this job
-      # needs the same cache the test jobs use — the key is shared on purpose, so
-      # whichever job runs first pays for the download and the rest reuse it.
-      # Without it, adding the smoke test would have quietly cost every run a
-      # 300 MB download.
       - uses: actions/cache@v4
         with:
           path: |
@@ -57,7 +76,44 @@ jobs:
             ~/.sbt
           key: sbt-${{ runner.os }}-${{ hashFiles('build.sbt', 'versions.json', 'project/build.properties') }}
           restore-keys: sbt-${{ runner.os }}-
+      - uses: actions/cache@v4
+        with:
+          path: .venv-sail
+          key: sail-${{ runner.os }}-${{ hashFiles('versions.json') }}
+      - run: nix develop --command sbt -batch ${{ matrix.backend }}/test
+
+  format:
+    name: format
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      # Its own job because it takes seconds and needs no dependencies at all.
+      # Bundled with the slower checks, a misplaced brace used to be reported
+      # only after a full compile had finished.
       - run: nix develop --command scalafmt --test .
+
+  commands:
+    name: commands
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.sbt
+          key: sbt-${{ runner.os }}-${{ hashFiles('build.sbt', 'versions.json', 'project/build.properties') }}
+          restore-keys: sbt-${{ runner.os }}-
       # Three devshell commands were broken and advertised for weeks: `run-demo`
       # died on the root project, `cscala` opened a REPL with no Spark, and
       # `clean-all` deleted three of five target directories. Nothing caught it
