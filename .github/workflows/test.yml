@@ -19,6 +19,15 @@ on:
 # restores it. It also means a broken lockfile or an unresolvable dependency
 # fails in one short job instead of in four long ones at the same time.
 #
+# Two caches, and they cover different things. `actions/cache` carries the sbt
+# and coursier downloads. The Nix store needs its own, because
+# `install-nix-action` starts every job with an empty one and the devshell —
+# JDK, sbt, scalafmt, python — is rebuilt from cache.nixos.org before any of the
+# job's own work begins. Measured before adding it: the `format` job took 1m 9s,
+# of which 1m 0s was inside `nix develop`, to run a `scalafmt` that takes two
+# seconds. `magic-nix-cache-action` uses the Actions cache as a Nix binary cache
+# so that closure is built once and restored afterwards.
+#
 # What is deliberately *not* shared is compiled output. Passing `target/` between
 # jobs would save a compile, but sbt's incremental state does not travel well
 # between machines and a stale hit is worse than a cold build. The tests compile
@@ -34,6 +43,7 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+      - uses: DeterminateSystems/magic-nix-cache-action@v14  # see the note above
       # Keyed on what actually determines the dependency set. `versions.json`
       # is in the key because it is where Spark's version lives.
       - uses: actions/cache@v4
@@ -69,6 +79,7 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+      - uses: DeterminateSystems/magic-nix-cache-action@v14  # see the note above
       - uses: actions/cache@v4
         with:
           path: |
@@ -92,6 +103,7 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+      - uses: DeterminateSystems/magic-nix-cache-action@v14  # see the note above
       # Its own job because it takes seconds and needs no dependencies at all.
       # Bundled with the slower checks, a misplaced brace used to be reported
       # only after a full compile had finished.
@@ -107,6 +119,7 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+      - uses: DeterminateSystems/magic-nix-cache-action@v14  # see the note above
       - uses: actions/cache@v4
         with:
           path: |
