@@ -11,7 +11,7 @@ jobs:
   scala-steward:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: scala-steward-org/scala-steward-action@v2
         with:
           # With the default GITHUB_TOKEN, the PRs the bot opens do NOT trigger
