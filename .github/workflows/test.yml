@@ -92,14 +92,14 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
             ~/.sbt
           key: sbt-${{ runner.os }}-${{ hashFiles('build.sbt', 'versions.json', 'project/build.properties') }}
           restore-keys: sbt-${{ runner.os }}-
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .venv-sail
           key: sail-${{ runner.os }}-${{ hashFiles('versions.json') }}
@@ -133,7 +133,7 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
