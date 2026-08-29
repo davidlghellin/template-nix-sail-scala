@@ -146,7 +146,7 @@ private[macros] object ExprMacro {
     // `s => Out(s.country, s.amount * 2)` is the shape typed ETLs are actually written in, so it
     // gets its own case: each constructor argument becomes a column, aliased to the field it
     // fills. Anything else is a single expression and produces a single column.
-    val columns: List[Tree] = translateBody(c)(f.tree, fields)
+    val columns: List[Tree] = translateBody(c)(f.tree, target, fields)
 
     c.Expr[Dataset[U]](q"$dataset.select(..$columns).as[$target]($encoder)")
   }
@@ -171,7 +171,7 @@ private[macros] object ExprMacro {
     val fields = target.decls
       .collectFirst { case m: MethodSymbol if m.isPrimaryConstructor => m }
       .map(_.paramLists.head.map(_.name.decodedName.toString))
-    val columns = translateBody(c)(f.tree, fields)
+    val columns = translateBody(c)(f.tree, target, fields)
     // `dataset` is a public val on the wrapper, so the prefix can be used directly rather than
     // taken apart — which is what made this simpler than the implicit-class version.
     c.Expr[devel0pez.macros.TypedDataset[U]](
@@ -190,14 +190,34 @@ private[macros] object ExprMacro {
     )
   }
 
-  /** One column, or one per field when the lambda builds a case class. */
+  /** One column, or one per field when the lambda **constructs** the target case class.
+    *
+    * "Constructs" is checked, not guessed. An earlier version matched any `Apply` whose arity
+    * happened to equal the field count, which silently mistranslated a call to any other method
+    * returning the same type: `s => swapped(s.a, s.b)` was compiled as `Target(s.a, s.b)`, quietly
+    * ignoring what `swapped` did. It compiled, it ran, and it answered something else — the exact
+    * failure this macro exists to rule out.
+    */
   private def translateBody(
       c: blackbox.Context
-  )(lambda: c.Tree, fields: Option[List[String]]): List[c.Tree] = {
+  )(lambda: c.Tree, target: c.Type, fields: Option[List[String]]): List[c.Tree] = {
     import c.universe._
+
+    /** Is this the constructor of `target`, or its companion's `apply`? */
+    def builds(fn: Tree): Boolean = {
+      val symbol = fn.symbol
+      symbol != null && symbol.isMethod && {
+        val owner = symbol.owner
+        val targetSymbol = target.typeSymbol
+        (symbol.asMethod.isConstructor && owner == targetSymbol) ||
+        (symbol.name == TermName("apply") &&
+          (owner == targetSymbol.companion || owner == targetSymbol.companion.asModule.moduleClass))
+      }
+    }
+
     lambda match {
-      case Function(params, Apply(_, args))
-          if fields.exists(_.length == args.length) && args.nonEmpty =>
+      case Function(params, Apply(fn, args))
+          if args.nonEmpty && fields.exists(_.length == args.length) && builds(fn) =>
         args.zip(fields.get).map { case (arg, name) =>
           val column = translateLambda(c)(Function(params, arg).asInstanceOf[c.Tree])
           q"$column.as($name)"
@@ -275,6 +295,7 @@ private[macros] object ExprMacro {
             Equality.contains(op.decodedName.toString) =>
         val name = op.decodedName.toString
         val leftType = unwrap(lhs).tpe
+        val rightType = unwrap(rhs).tpe
         def left = translate(lhs)
         def right = translate(rhs)
         def columnOp(symbol: String) = TermName(symbol).encodedName.toTermName
@@ -283,14 +304,18 @@ private[macros] object ExprMacro {
             (t <:< typeOf[Int] || t <:< typeOf[Long] || t <:< typeOf[Short] || t <:< typeOf[Byte])
 
         name match {
-          // Measured, not assumed: Scala's `5 / 2` is `2`, and Spark's `col / 2` is `2.5` with
-          // type Double. Translating this would compile, run, and quietly answer something else.
-          case "/" | "%" if isIntegral(leftType) =>
+          // Measured, not assumed. Integer division is the only one that parts them:
+          //   5 / 2    Scala 2 (Int)      Spark 2.5 (Double)   <- differ
+          //   5 / 2.0  Scala 2.5          Spark 2.5            <- agree
+          //   5 % 2    Scala 1 (Int)      Spark 1 (Int)        <- agree
+          // So the guard needs *both* operands to be integral, and `%` needs no guard at all.
+          // Rejecting more than this refuses code that would have been perfectly correct.
+          case "/" if isIntegral(leftType) && isIntegral(rightType) =>
             c.abort(
               c.enclosingPosition,
-              s"`$name` on `${showCode(lhs)}` does not mean the same thing on both sides: Scala " +
-                s"divides integers and gives an integer, Spark returns a Double — `5 / 2` is 2 " +
-                s"in the lambda and 2.5 in the column. Cast the operand explicitly, or write " +
+              s"`/` on two integers does not mean the same thing on both sides: Scala divides " +
+                s"integers and gives an integer, Spark returns a Double — `5 / 2` is 2 in the " +
+                s"lambda and 2.5 in the column. Cast one operand to a fractional type, or write " +
                 s"this expression by hand."
             )
 

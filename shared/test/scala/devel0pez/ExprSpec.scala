@@ -23,6 +23,11 @@ import devel0pez.macros.TypedDataset
 /** What a `map` to a case class produces — the canonical shape of a typed ETL step. */
 final case class Doubled(country: String, doubled: BigDecimal)
 
+/** Returns a `Doubled` without constructing one in place: the shape the macro must refuse. */
+object notAConstructor {
+  def apply(country: String, amount: BigDecimal): Doubled = Doubled(country, amount)
+}
+
 final class ExprSpec extends SparkSuite {
 
   private def sales = {
@@ -152,6 +157,26 @@ final class ExprSpec extends SparkSuite {
       // muddle that with a question about determinism. Lifting this would
       // silently turn a per-row expression into a driver-side constant.
       assertDoesNotCompile("""Expr.of[Sale](_ => "abc".length)""")
+    }
+
+    "only splits a lambda that actually constructs the target" in {
+      val session = spark
+      import session.implicits._
+
+      // An earlier version matched any call whose arity equalled the field
+      // count, so `s => swapped(s.a, s.b)` compiled as `Doubled(s.a, s.b)` —
+      // ignoring what `swapped` did and answering something else. Now the
+      // constructor is checked, and anything else is refused.
+      assertCompiles("""sales.mapExpr(s => Doubled(s.country, s.amount * 2))""")
+      assertDoesNotCompile("""sales.mapExpr(s => notAConstructor(s.country, s.amount))""")
+    }
+
+    "allows the integer operators that both engines agree on" in {
+      // Measured: `5 % 2` is 1 on both, and `5 / 2.0` is 2.5 on both. Only
+      // integer-by-integer division parts them, so only that is refused.
+      assertCompiles("""Expr.of[Event](_.userId % 2)""")
+      assertCompiles("""Expr.of[Event](_.userId / 2.0)""")
+      assertDoesNotCompile("""Expr.of[Event](_.userId / 2)""")
     }
 
     "is refused when the operator would mean something else" in {
