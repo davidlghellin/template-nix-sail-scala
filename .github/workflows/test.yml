@@ -26,18 +26,20 @@ permissions:
 #           ├── format
 #           └── commands
 #
-# `setup` pays for the download once and saves the cache; everything downstream
-# restores it. It also means a broken lockfile or an unresolvable dependency
-# fails in one short job instead of in four long ones at the same time.
+# `setup` decides and nothing else. It was briefly a warm-up job that resolved
+# dependencies so the others would not each repeat it — and measured, that was a
+# bad trade: it cost 1m 19s that everything downstream waited for, to save a
+# download that only happens on a cold cache. Warm is the common case, so the
+# common case was paying for the rare one. It now runs in seconds.
 #
-# Two caches, and they cover different things. `actions/cache` carries the sbt
-# and coursier downloads. The Nix store needs its own, because
-# `install-nix-action` starts every job with an empty one and the devshell —
-# JDK, sbt, scalafmt, python — is rebuilt from cache.nixos.org before any of the
-# job's own work begins. Measured before adding it: the `format` job took 1m 9s,
-# of which 1m 0s was inside `nix develop`, to run a `scalafmt` that takes two
-# seconds. `magic-nix-cache-action` uses the Actions cache as a Nix binary cache
-# so that closure is built once and restored afterwards.
+# `actions/cache` carries the sbt and coursier downloads. There is deliberately
+# no Nix binary cache here, and the reason is measured rather than assumed:
+# `magic-nix-cache-action` was tried and removed. It did work — the store paths
+# arrived from a local daemon instead of cache.nixos.org — but it took the
+# `format` job's `nix develop` from 1m 0s to 56s while costing 13s of its own.
+# The bottleneck is not where the closure comes from, it is `nix` copying
+# thousands of paths into an empty store, which costs the same either way. The
+# lever that would actually move it is a smaller closure.
 #
 # What is deliberately *not* shared is compiled output. Passing `target/` between
 # jobs would save a compile, but sbt's incremental state does not travel well
@@ -70,28 +72,6 @@ jobs:
               - '.scalafmt.conf'
               - 'scripts/**'
               - '.github/workflows/**'
-      - uses: cachix/install-nix-action@v30
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-      - uses: DeterminateSystems/magic-nix-cache-action@v14  # see the note above
-      # Keyed on what actually determines the dependency set. `versions.json`
-      # is in the key because it is where Spark's version lives.
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/coursier
-            ~/.sbt
-          key: sbt-${{ runner.os }}-${{ hashFiles('build.sbt', 'versions.json', 'project/build.properties') }}
-          restore-keys: sbt-${{ runner.os }}-
-      # The Sail server venv depends only on the declared versions.
-      - uses: actions/cache@v4
-        with:
-          path: .venv-sail
-          key: sail-${{ runner.os }}-${{ hashFiles('versions.json') }}
-      # `update` resolves every dependency without compiling anything, which is
-      # exactly the work the downstream jobs would otherwise each repeat.
-      - run: nix develop --command sbt -batch update
 
   test:
     name: test (${{ matrix.backend }})
@@ -112,7 +92,6 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - uses: DeterminateSystems/magic-nix-cache-action@v14  # see the note above
       - uses: actions/cache@v4
         with:
           path: |
@@ -137,7 +116,6 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - uses: DeterminateSystems/magic-nix-cache-action@v14  # see the note above
       # Its own job because it takes seconds and needs no dependencies at all.
       # Bundled with the slower checks, a misplaced brace used to be reported
       # only after a full compile had finished.
@@ -155,7 +133,6 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - uses: DeterminateSystems/magic-nix-cache-action@v14  # see the note above
       - uses: actions/cache@v4
         with:
           path: |
