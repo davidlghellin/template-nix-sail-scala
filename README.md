@@ -95,12 +95,17 @@ reach for something slower.
 ```bash
 tt BaseCaseSpec    # one suite, against both backends — the inner loop
 c                  # compile main and test without running anything
-cscala             # Scala REPL with Spark and the project on the classpath
+cscala             # Scala REPL with Spark and the project (classic; `cscala connect` too)
+run-demo           # run the demo (classic; `run-demo connect` needs a server up)
 sail-server        # a Sail server in the foreground on :50051, to poke at by hand
-run-demo           # run Demo.main
 fc                 # check formatting without rewriting (what CI runs)
-clean-all          # delete target/ and the sbt build cache
+clean-all          # delete every target/ and the sbt build cache
 ```
+
+`cscala` and `run-demo` name a backend because the root project only aggregates:
+it has no sources and no dependencies, so `sbt run` there finds no main class and
+its REPL has neither Spark nor the project on the classpath. Both default to
+`classic`, which needs nothing else running.
 
 `tt` is the one that changes how the day feels: a full `t` pays for two Spark
 sessions and every suite, while `tt ConformSpec` is seconds. `cscala` is the
