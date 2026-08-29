@@ -20,7 +20,12 @@
         # `maven.compiler.release=17`, so on anything older it does not even
         # link. 21 is the other version Spark 4 supports, and the one this
         # template runs on.
-        jdk = pkgs.jdk21;
+        # `_headless` drops AWT and Swing, and with them the whole graphics branch:
+        # GTK, wayland, libxft, libxcursor, freetype, even tinysparql. CI was
+        # copying every one of those into an empty Nix store on each of four
+        # jobs, for a Spark build that never opens a window. On macOS the two are
+        # the same derivation, so this changes nothing locally.
+        jdk = pkgs.jdk21_headless;
 
         # nixpkgs' sbt ships a JDK of its own and exports its JAVA_HOME on the
         # way in, which silently beats the devshell's. Without this override the
@@ -85,6 +90,15 @@
             $(type -p menu &>/dev/null && menu)
           '';
 
+          # One shell for everything, including CI. A leaner one for the format
+          # job was tried and dropped: `pkgs.scalafmt` carries its own
+          # `zulu-ca-jdk-21`, so a formatting-only shell still pulls a full JDK
+          # and saves only sbt, coursier and fzf — too little to pay for CI
+          # running an environment nobody develops in.
+          #
+          # Which also means this list holds two JDKs: `jdk` below, and the one
+          # inside `scalafmt`. Nixpkgs wires that second one in; it is not ours
+          # to remove.
           packages = [ jdk sbt pkgs.scalafmt pkgs.coursier pkgs.fzf ];
 
           # An override, not a default. sbt and Spark read JAVA_HOME before the
