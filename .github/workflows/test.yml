@@ -5,6 +5,17 @@ on:
     branches: [master, main]
   pull_request:
 
+# A new push to a pull request makes the run in flight pointless, and on an
+# iterative branch that is most of them. Cancelling frees the runners for the
+# push that supersedes it. Never cancel on `main`: those runs are the record.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Nothing here writes anything back.
+permissions:
+  contents: read
+
 # The shape is a graph rather than a flat list of jobs, and not for the picture.
 # Every job here starts by entering the same devshell and resolving the same
 # dependencies, so when they all start at once they all miss the cache at once
@@ -37,8 +48,28 @@ jobs:
   setup:
     name: setup
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      # Whether anything that could change a test result was touched. A pull
+      # request that only edits prose does not need two Spark suites run
+      # against it, and used to get them anyway.
+      code: ${{ steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**/*.scala'
+              - 'build.sbt'
+              - 'project/**'
+              - 'versions.json'
+              - 'flake.nix'
+              - 'flake.lock'
+              - '.scalafmt.conf'
+              - 'scripts/**'
+              - '.github/workflows/**'
       - uses: cachix/install-nix-action@v30
         with:
           extra_nix_config: |
@@ -65,7 +96,9 @@ jobs:
   test:
     name: test (${{ matrix.backend }})
     needs: setup
+    if: ${{ needs.setup.outputs.code == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -97,6 +130,7 @@ jobs:
     name: format
     needs: setup
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
@@ -112,7 +146,9 @@ jobs:
   commands:
     name: commands
     needs: setup
+    if: ${{ needs.setup.outputs.code == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
