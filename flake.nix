@@ -20,7 +20,12 @@
         # `maven.compiler.release=17`, so on anything older it does not even
         # link. 21 is the other version Spark 4 supports, and the one this
         # template runs on.
-        jdk = pkgs.jdk21;
+        # `_headless` drops AWT and Swing, and with them the whole graphics branch:
+        # GTK, wayland, libxft, libxcursor, freetype, even tinysparql. CI was
+        # copying every one of those into an empty Nix store on each of four
+        # jobs, for a Spark build that never opens a window. On macOS the two are
+        # the same derivation, so this changes nothing locally.
+        jdk = pkgs.jdk21_headless;
 
         # nixpkgs' sbt ships a JDK of its own and exports its JAVA_HOME on the
         # way in, which silently beats the devshell's. Without this override the
@@ -85,6 +90,15 @@
             $(type -p menu &>/dev/null && menu)
           '';
 
+          # One shell for everything, including CI. A leaner one for the format
+          # job was tried and dropped: `pkgs.scalafmt` carries its own
+          # `zulu-ca-jdk-21`, so a formatting-only shell still pulls a full JDK
+          # and saves only sbt, coursier and fzf — too little to pay for CI
+          # running an environment nobody develops in.
+          #
+          # Which also means this list holds two JDKs: `jdk` below, and the one
+          # inside `scalafmt`. Nixpkgs wires that second one in; it is not ours
+          # to remove.
           packages = [ jdk sbt pkgs.scalafmt pkgs.coursier pkgs.fzf ];
 
           # An override, not a default. sbt and Spark read JAVA_HOME before the
@@ -138,14 +152,20 @@
             {
               category = "build";
               name = "run-demo";
-              help = "Run the demo (Main)";
-              command = ''sbt -batch run "$@"'';
+              help = "Run the demo, e.g. run-demo (classic) or run-demo connect";
+              # The root project aggregates and has no sources, so `sbt run` there
+              # finds no main class. Each backend has its own `Main`; classic is
+              # the default because it needs no server running.
+              command = ''sbt -batch "''${1:-classic}/run"'';
             }
             {
               category = "console";
               name = "cscala";
-              help = "Scala REPL with Spark and the project on the classpath";
-              command = ''sbt console'';
+              help = "Scala REPL with Spark and the project, e.g. cscala (classic) or cscala connect";
+              # Must name a backend: the root project declares no dependencies, so
+              # its console has neither Spark nor the project on the classpath —
+              # `import org.apache.spark.sql.SparkSession` fails there.
+              command = ''sbt "''${1:-classic}/console"'';
             }
             {
               category = "lint";
@@ -161,9 +181,20 @@
             }
             {
               category = "env";
+              name = "check-commands";
+              help = "Smoke-test the commands in this menu";
+              command = ''"$PRJ_ROOT"/scripts/check-commands.sh'';
+            }
+            {
+              category = "env";
               name = "clean-all";
-              help = "Delete target/ and the sbt build cache";
-              command = ''rm -rf "$PRJ_ROOT/target" "$PRJ_ROOT/project/target" "$PRJ_ROOT/project/project"'';
+              help = "Delete every target/ and the sbt build cache";
+              # Every target, not just the root's: the subprojects keep their own,
+              # and leaving them behind made this look like it had run when it had
+              # only half worked.
+              command = ''rm -rf "$PRJ_ROOT"/target "$PRJ_ROOT"/project/target \
+                "$PRJ_ROOT"/project/project "$PRJ_ROOT"/macros/target \
+                "$PRJ_ROOT"/backend/*/target'';
             }
           ];
 
