@@ -19,7 +19,7 @@ structurally cannot hold it: that suite is Python and PySpark, and a Scala
 `Dataset.map` cannot be expressed from there. If you work on Sail, this is
 probably the part you want.
 
-**A research spike**, isolated in `macros/`: can a typed lambda be translated
+**A research spike**, isolated in `findings/macros/`: can a typed lambda be translated
 into a `Column` at compile time? It works, and the section on it explains why
 that still does not solve the problem.
 
@@ -62,11 +62,34 @@ The closures live only in the specs that exist to show what they cost.
 │   │                         #   PipelineEtl, ConformedEtl, MeterEtl, Conform,
 │   │                         #   Storage, Model, Demo
 │   └── test/scala/devel0pez/ #   the specs, which run twice
-├── macros/                   # the spike: lambda -> Column at compile time
-└── backend/
-    ├── classic/              # classic Spark on the local JVM
-    └── connect/              # Sail, over Spark Connect
+├── backend/
+│   ├── classic/              # classic Spark on the local JVM
+│   └── connect/              # Sail, over Spark Connect
+└── findings/                 # DELETE THIS to get the template back
+    ├── shared/test/          #   what Sail refuses, where the engines differ,
+    │                         #   which best practices survive the plan
+    ├── classic/test/         #   plan inspection that only compiles on classic
+    ├── connect/{main,test}/  #   the request protobuf, and the client-side guard
+    └── macros/               #   the spike: lambda -> Column at compile time
 ```
+
+## Two halves, and one of them is deletable
+
+This repository is a template with a research project attached, and the second
+half has grown larger than the first. So it is fenced off rather than mixed in:
+everything that exists to *investigate* the engines lives under `findings/`, and
+nothing outside it refers to anything inside it.
+
+Start a project from this and `rm -rf findings` on day one, plus five edits in
+`build.sbt` that `findings/README.md` spells out and that have been verified by
+applying them to a copy and running the suite. What is left is the flake, the
+dual-backend build, `Conform`, `Storage`, `Model`, six ETLs and their specs —
+82 tests on classic and 83 on Sail, still green.
+
+Keep it and you get the other 141 and 150, which are the reason most of this
+README exists. The split is a source directory rather than a subproject on
+purpose: the specs are worth having because the same assertions run against both
+engines, and a subproject would have to pick a client.
 
 ## Getting started
 
@@ -604,6 +627,33 @@ not something a value can carry. `Storage.catalog` says "this lives in a
 catalogue table" and leaves the catalogue's identity to whoever built the
 session, which is also why it works unchanged on both engines.
 
+### Partitioned tables, where the ordering rule bites
+
+`Storage.partitioned[T](table, Seq("day"))` is the same contract plus the one
+rule partitioning adds and nothing enforces: **a partition column is moved to
+the end of the table's schema**, whatever order you declared it in. Both engines
+agree on that, and `PartitionedSpec` measures it —
+
+```sql
+CREATE TABLE t (day DATE, k STRING, v INT) USING parquet PARTITIONED BY (day)
+-- spark.table("t").schema.fieldNames  =>  k, v, day
+```
+
+— which matters because `insertInto` matches by **position**. A model listing
+`day` first writes the date into whatever column happens to be first. On classic
+that surfaces as `INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST`, an error
+about casting that says nothing about ordering. On Sail it does not surface at
+all: the same `INSERT` in declaration order simply succeeds, because Sail keeps
+the order you wrote. Friendlier in isolation, and a portability hazard in a
+project that runs on both.
+
+So the instance checks the model's field order at write time and refuses with a
+message about the actual problem, before anything is written. What it
+deliberately does *not* do is set `partitionOverwriteMode` for you — that is a
+session-wide setting Sail ignores, in the data-destroying direction described
+above, and inheriting it silently from a storage instance is the last way anyone
+should meet it.
+
 ## What we know about Sail from the JVM
 
 Everything here was measured against `pysail` 0.7.0 with the 4.2.0 JVM client,
@@ -653,6 +703,8 @@ anything needing bytecode executed server-side does not.**
 | `DECIMAL(38,18) + itself` | `decimal(38,17)` | `decimal(38,18)` |
 | `DECIMAL(38,18) / 2` | `decimal(38,18)` | `decimal(38,22)` |
 | the query plan | Catalyst: `Project`, `Filter` | DataFusion: `ProjectionExec`, `FilterExec` |
+| `spark.sql.session.timeZone`, on a timestamp the engine computes | applied | reported back, then ignored: answers in UTC |
+| `partitionOverwriteMode=dynamic` | replaces only the partitions written | reported back, then ignored: replaces the whole table |
 
 The decimal rows have a sharper diagnosis than the table shows, and it is in
 `DecProbe`: the two agree whenever **both** operands declare their precision.
@@ -664,6 +716,27 @@ the schema that moves, which is invisible until the result meets a table.
 On the `to(schema)` row, note which engine is stricter: Sail refuses, classic
 invents nulls. That is the argument for `Conform` checking before it calls `to`
 — the guard is what makes both engines answer the same way.
+
+The last two rows are a different kind of divergence from the rest of the table,
+and worse. Everything above them either raises or changes a schema, so something
+somewhere notices. These two are **settings that are accepted and then not
+applied**: `spark.conf.get` hands the value straight back, nothing raises, and
+the answer is quietly different.
+
+`partitionOverwriteMode` is the expensive one. The standard way to reprocess a
+day is `mode("overwrite").insertInto(table)` with the mode set to `dynamic`, so
+only the partitions being written are replaced. Measured in `PartitionedSpec`:
+classic replaces one day and keeps the other; Sail deletes every partition the
+job did not write. A daily job that reruns yesterday every morning would truncate
+its own history every morning, successfully. Until that is fixed in Sail, the
+portable choice is `static` — both engines agree on it, and it is at least
+destructive in a way you asked for.
+
+The timezone row is narrower than it looks. A timestamp that travels **in the
+data** is read identically by both engines, which is why every fixture in this
+project is safe and why nothing here caught this for so long. It is only a
+timestamp the engine *computes* — `timestamp_seconds` and friends — where Sail
+ignores the session zone. `TimeZoneSpec` measures both halves across four zones.
 
 ### What is not fixed here
 
@@ -820,13 +893,114 @@ chained `withColumn` used to claim the nesting reached the executed query. It
 does not — Catalyst collapses it — and the numbers live in `ClassicPlanSpec` now
 rather than in anybody's memory.
 
-It sits in `backend/classic/src/test` rather than in `shared/test`, and the
+It sits in `findings/classic/test` rather than alongside the shared specs, and the
 reason is a category of divergence the rest of this README does not cover.
 `perEngine` and `failsOnSail` handle engines that *behave* differently at run
 time. Connect's `QueryExecution` is a different class without `analyzed` or
 `optimizedPlan`, so code touching them does not **compile** for the connect
 backend — no runtime branch can rescue that, and a backend-specific source
 directory is the only thing that says it.
+
+## Best practices, measured
+
+Most advice about writing fast Spark is a rule about how to phrase a query.
+`PracticeSpec` takes eight of them, writes each query the naive way and the
+recommended way, and compares the **physical plans** on both engines. If the
+optimiser already does it, the two plans are the same and the rule is folklore:
+true once, obsolete now, still enforced in code review.
+
+| rule | classic | Sail |
+|---|---|---|
+| chained `withColumn` → one `select` | same plan | same plan |
+| filter before the join, not after | same plan | same plan |
+| project before the join, not after | same plan | same plan |
+| `distinct` → `dropDuplicates` | same plan | same plan |
+| filter before the `union`, not after | same plan | same plan |
+| `orderBy().limit()` → don't sort it all | already a top-N | already a top-N |
+| `broadcast(small)`, default threshold | same plan | same plan |
+| `broadcast(small)`, **auto-broadcast off** | `SortMergeJoin` → `BroadcastHashJoin` | same plan |
+
+Seven of the eight change nothing, on either engine. That is the useful result,
+and it is not an argument for writing queries carelessly — `select` over chained
+`withColumn` is still the house rule here, because it says the output shape in
+one place. It is an argument about *why*: legibility, not speed. The practices
+worth arguing over are the ones no optimiser can do for you, and this repository
+has one — a closure hides the predicate from the planner entirely, and
+`PushdownSpec` measures a full scan where a column would have pushed down.
+
+The last row is the exception, and it is pointed. Once the automatic broadcast
+is out of the way, the hint is the one rewrite in this table that still changes a
+plan on classic — and it is the one Sail does not implement. Nothing raises;
+Sail's plan simply does not move, because it already collects the build side and
+consults neither the hint nor the threshold.
+
+Note what the seventh row costs if you stop at it. With the default threshold the
+dimension is small enough that classic broadcasts it anyway, so the hint looks
+useless — a conclusion about this fixture masquerading as one about hints. The
+eighth row exists because the seventh alone would teach the wrong thing.
+
+`Plans.shape` is what makes the comparison possible. Both engines stamp every
+expression with an allocation counter — `amount#35` and `[plan_id=101]` on
+Catalyst, `#26@0` and `as #26` on DataFusion — so two plans built from two
+different `Dataset` values never compare equal as strings, however identical they
+are. Stripping the counters is the difference between a comparison that means
+something and one that always says "no". DataFusion's positional `@0` is left
+alone: that one moves when the shape does, which is exactly what should be
+noticed.
+
+## The wire, and what you can do before it leaves
+
+`Plans.of` shows what the engine decided. It cannot show what the client *asked
+for*, because by the time `explain` speaks the request has already been
+interpreted — and when the engines disagree, which of them invented the
+difference is exactly the question. `WirePlan.of(ds)` is the other end: the
+request protobuf, read locally, with no server and nothing executed. There is no
+classic equivalent and there cannot be, so it lives in `backend/connect`.
+
+It paid for itself immediately. `ClosureSpec` had long recorded that Sail names
+`groupByKey` accurately (`Scala UDF is not supported yet`) and reports the other
+four closures as an unresolved wildcard, and explained it by reasoning about the
+order of Sail's resolver. `WirePlanSpec` stops that being an inference: the cause
+is one optional field in the request. `filter` and `map` hand the UDF a wildcard
+carrying a `plan_id`; `groupByKey` hands it one without. Sail resolves a UDF's
+arguments before it inspects the function, so the first four die on the plan id
+and never reach the branch that knows what a Scala UDF is.
+
+The second use is a guard rather than a diagnostic. `ClosureGuard` is a gRPC
+interceptor that refuses a plan containing a Scala closure **before it is sent**:
+
+```scala
+val spark = ClosureGuard.install(SparkSession.builder().remote(url)).create()
+
+spark.range(10).filter(_ > 5L).count()
+// devel0pez.ClosureNotSupported: `filter` with a Scala closure at Job.scala:42.
+// Sail has no JVM to run it on. Rewrite it with Columns — which also recovers
+// the predicate pushdown and the column pruning the closure gives up on
+// classic Spark.
+```
+
+Both halves of that message are things no server could say. The operation name
+and the **file and line** come from the JVM origin the client attaches to the
+expression; Sail has never seen your source and never will. Compare what it
+replaces: `[UNRESOLVED_WILDCARD_WITH_PLAN_ID]`, which names neither the closure
+nor the reason.
+
+What the guard deliberately does **not** do is rewrite the plan. That idea is
+tempting and it does not work: the Connect client sends plans *unresolved*, by
+design, so collapsing two projections would mean substituting one expression into
+another without knowing whether `col("b")` means the column just added or one
+that was already there. That needs the schema, which the client does not have.
+The right altitude for a client to optimise at is the API — which is where the
+`Expr` macro operates, on the Scala AST, while the types are still attached.
+
+One wrinkle worth recording, since it costs an afternoon to rediscover:
+`SparkSession.Builder.interceptor` **cannot be called from Scala source** in
+Spark 4.2.0. Spark shades gRPC, rewriting the bytecode so the method really takes
+`org.sparkproject.io.grpc.ClientInterceptor`, but the shading step does not
+rewrite the `ScalaSignature`, which still names the original `io.grpc` class —
+one that is on no classpath anywhere. `scalac` reads the stale signature and
+fails. `ClosureGuard.install` binds through reflection instead, against the
+descriptor that is actually there.
 
 ## Analytics
 

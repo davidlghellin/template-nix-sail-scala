@@ -72,6 +72,53 @@ object Storage {
     def save(ds: Dataset[T]): Unit = ds.conformTo[T].createOrReplaceTempView(name)
   }
 
+  /** A **partitioned** catalogue table.
+    *
+    * Same contract as `catalog`, plus the one rule partitioning adds and nothing enforces: a
+    * partition column is moved to the **end** of the table's schema whatever order you declared it
+    * in. `PartitionedSpec` measures that, and both engines agree on it.
+    *
+    * That interacts badly with `insertInto`, which matches by position. A model listing `day` first
+    * writes the date into whatever column happens to be first — caught by ANSI on classic as an
+    * unrelated-looking cast error, and on Sail not caught at all. So the check here is on the
+    * **order** of `T`'s fields, made at write time, where it can name the problem:
+    *
+    * {{{
+    * Storage.partitioned[Daily]("daily", Seq("day"))   // Daily must declare `day` last
+    * }}}
+    *
+    * On reprocessing a single day, this deliberately does not set
+    * `spark.sql.sources.partitionOverwriteMode` for you. It is a session-wide setting, silently
+    * ignored by Sail — which reports `dynamic` and then performs a static overwrite, deleting every
+    * partition the job did not write. `PartitionedSpec` pins that. Choosing it is the caller's
+    * decision to make knowingly, not a default to inherit from a storage instance.
+    */
+  def partitioned[T: Conform](table: String, partitionBy: Seq[String]): Storage[T] =
+    new Storage[T] {
+      private val fields = Conform[T].schema.fieldNames.toSeq
+
+      // The partition columns have to be exactly the trailing fields, in order.
+      private def checkOrder(): Unit = {
+        val trailing = fields.takeRight(partitionBy.size)
+        if (trailing != partitionBy) {
+          throw new ConformError(
+            s"partition columns must be the last fields of the model, in order: " +
+              s"wanted [${partitionBy.mkString(", ")}] at the end of " +
+              s"[${fields.mkString(", ")}], found [${trailing.mkString(", ")}]. " +
+              s"A partitioned table reports its partition columns last, and `insertInto` " +
+              s"matches by position."
+          )
+        }
+      }
+
+      def load(spark: SparkSession): Dataset[T] = spark.table(table).conformTo[T]
+
+      def save(ds: Dataset[T]): Unit = {
+        checkOrder()
+        ds.conformTo[T].write.insertInto(table)
+      }
+    }
+
   /** `spark.load[Sale]`. Needs `import Storage._`. */
   implicit final class LoadOps(private val spark: SparkSession) extends AnyVal {
     def load[T](implicit instance: Storage[T]): Dataset[T] = instance.load(spark)

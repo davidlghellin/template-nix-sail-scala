@@ -6,15 +6,13 @@ import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.IntegerType
 
-import devel0pez.macros.Expr
-
 /** A typed ETL end to end: read a table as a `Dataset[T]`, join, aggregate, and insert into another
   * table — with case classes at every step.
   *
   * The point is not the ETL, it is the question underneath: how much of the typed API survives
   * Spark Connect. A `DataFrame` is a `Dataset[Row]`, so the hope is that everything does. It does
-  * not, and the line is worth knowing before building on it — see `TypedEtl` and the last test
-  * here.
+  * not, and the line is worth knowing before building on it — see `TypedEtl`, and
+  * `findings/TypedLambdaSpec` for what exactly fails and the two ways round it.
   */
 final class TypedEtlSpec extends SparkSuite {
 
@@ -154,46 +152,6 @@ final class TypedEtlSpec extends SparkSuite {
       }
       back.map(_.total).sum shouldBe BigDecimal("344.08")
       back.head.day shouldBe day
-    }
-
-    "refuses a typed lambda, and there are two ways round it" in {
-      val session = spark
-      import session.implicits._
-      val sales = TypedEtl.sales(spark, salesTbl)
-
-      // WHAT FAILS. `map` does not travel as an expression: Connect serialises
-      // the closure into a `UdfPacket`, uploads the compiled class as an
-      // artifact and expects the server to deserialise and run it. A JVM server
-      // can; Sail is Rust and cannot.
-      //
-      // The message is pinned on purpose, and pinned to a *bad* one. Sail
-      // answers `wildcard with plan ID`, which names neither the lambda nor the
-      // reason. In Sail's resolver, `resolve_map_partitions` resolves the UDF's
-      // arguments before it looks at what kind of UDF it is, and a typed `map`
-      // passes its arguments as a wildcard with a plan id — so the accurate
-      // message Sail already has, `Scala UDF is not supported yet`, is never
-      // reached. Pinning it makes this the tripwire: the day that improves, or
-      // the day Sail runs the lambda outright, this goes red and says so.
-      failsOnSail("wildcard with plan ID")(sales.map(_.amount * 2).collect())
-
-      // WAY ROUND IT (1): the column, written by hand. The cast is not
-      // decoration — multiplying widens the decimal to (38,18), and the JVM
-      // client's Arrow reader refuses that one with `Reading
-      // 'DecimalType(38,18)' values ... is not supported`.
-      val byHand = sales.select((col("amount") * 2).cast("decimal(18,2)").as("doubled"))
-
-      // WAY ROUND IT (2): the same expression through the compile-time macro,
-      // which keeps the lambda's spelling and still travels as a column.
-      //
-      // What this does **not** do is worth stating: the `map` above still
-      // fails, unchanged. This is a different call site, not a fix for that
-      // one — nothing here alters what Sail is able to execute.
-      val byMacro = sales.select(Expr.of[Sale](_.amount * 2).cast("decimal(18,2)").as("doubled"))
-
-      // Three spellings, one answer, and the two that work agree exactly.
-      byHand.as[BigDecimal].collect().sum shouldBe BigDecimal("688.16")
-      byMacro.as[BigDecimal].collect().sum shouldBe BigDecimal("688.16")
-      byMacro.collect().toSeq shouldBe byHand.collect().toSeq
     }
   }
 
