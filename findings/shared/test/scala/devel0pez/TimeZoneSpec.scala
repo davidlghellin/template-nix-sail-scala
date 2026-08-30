@@ -1,7 +1,7 @@
 package devel0pez
 
 import java.sql.{Date, Timestamp}
-import java.time.Instant
+import java.time.{Instant, ZoneId}
 
 import org.apache.spark.sql.functions.{col, lit, timestamp_seconds}
 
@@ -49,6 +49,20 @@ final class TimeZoneSpec extends SparkSuite {
       .head
       .getDate(0)
 
+  /** The literal every fixture in this project is built from. */
+  private val fixture = "2026-01-19 00:30:00"
+
+  /** What `java.time` says that fixture's instant falls on, in a given zone.
+    *
+    * Derived rather than written down, and that is the whole point of it. `Timestamp.valueOf`
+    * resolves its string in the **JVM** zone, so the instant differs between a laptop in Madrid and
+    * a CI runner in UTC. An expected value typed as a literal is therefore a value for one machine
+    * — which is exactly the mistake this spec was written to warn about, and made anyway in its
+    * first version.
+    */
+  private def expected(zone: String): Date =
+    Date.valueOf(Timestamp.valueOf(fixture).toInstant.atZone(ZoneId.of(zone)).toLocalDate)
+
   /** A timestamp that travels in the data, built the way every fixture here is built. */
   private def carried: Date = {
     val session = spark
@@ -64,37 +78,41 @@ final class TimeZoneSpec extends SparkSuite {
   "a timestamp carried in the data" - {
 
     "reads the same on both engines, which is why the fixtures here are safe" in {
-      // Measured across four zones; two of them are kept below. Both engines
-      // apply the session zone to a stored timestamp identically, so every
-      // `Timestamp.valueOf` fixture in this project means the same thing to
-      // classic and to Sail.
-      withZone("UTC")(carried) shouldBe Date.valueOf("2026-01-18")
-      withZone("Asia/Tokyo")(carried) shouldBe Date.valueOf("2026-01-19")
+      // Both engines apply the session zone to a stored timestamp the way
+      // `java.time` would, so every `Timestamp.valueOf` fixture in this project
+      // means the same thing to classic and to Sail. Measured across four
+      // zones; two are kept.
+      withZone("UTC")(carried) shouldBe expected("UTC")
+      withZone("Asia/Tokyo")(carried) shouldBe expected("Asia/Tokyo")
     }
 
     "and moves by a day under UTC, which is the trap the suites avoid" in {
       // `Timestamp.valueOf` reads its string in the **JVM** zone, so a fixture
       // is pinned to the machine while the session zone decides how it is read
-      // back. Setting UTC — which looks like it would make things agree — is
-      // what shifts it. Hence: no zone override in either suite, and fixtures
-      // built in whatever zone the JVM is in.
-      withZone("UTC")(carried) should not be withZone("Asia/Tokyo")(carried)
+      // back. Change the session zone and the value moves. Hence: no zone
+      // override in either suite, and fixtures built in whatever zone the JVM
+      // is in.
+      //
+      // These two are 25 hours apart, so they disagree about the date for *any*
+      // instant. Naming a zone the JVM might already be in would make the test
+      // pass or vanish depending on the machine.
+      withZone("Pacific/Kiritimati")(carried) should not be withZone("Pacific/Midway")(carried)
     }
   }
 
   "a timestamp the engine computes" - {
 
     "is where the two genuinely disagree, and nothing raises" in {
-      // Same query, same instant, same session config, different answer. 23:30
-      // UTC is 00:30 the next day in Madrid, and the suites run with the JVM's
-      // zone, so classic says the 20th.
+      // Same query, same instant, same session zone, different answer. The zone
+      // is named rather than inherited from the JVM: 23:30 UTC is 08:30 the next
+      // morning in Tokyo, on any machine.
       perEngine {
-        computed shouldBe Date.valueOf("2026-01-20")
+        withZone("Asia/Tokyo")(computed) shouldBe Date.valueOf("2026-01-20")
       } {
         // Sail answers in UTC and stays there. Note the config is not being
         // rejected or lost — `spark.conf.get` hands the zone straight back —
         // it simply is not applied to a timestamp the engine built itself.
-        computed shouldBe Date.valueOf("2026-01-19")
+        withZone("Asia/Tokyo")(computed) shouldBe Date.valueOf("2026-01-19")
       }
     }
 
