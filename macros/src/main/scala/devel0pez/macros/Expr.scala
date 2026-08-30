@@ -17,8 +17,7 @@ import org.apache.spark.sql.{Column, Dataset, Encoder}
   *
   * Note where the work happens. Nothing is decompiled and nothing is analysed at run time: at
   * compile time the typed AST of the lambda is right there, which is a far better starting point
-  * than bytecode. Spark has wanted the bytecode version since 2016 (SPARK-14083, still open); this
-  * is the cheap half of the same idea.
+  * than bytecode — the types are still attached, and nothing has been desugared away yet.
   *
   * The failure mode is the point of the exercise. A lambda outside the supported subset does not
   * compile, with a message naming the part that could not be translated. It cannot produce a
