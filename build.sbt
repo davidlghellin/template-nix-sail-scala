@@ -59,7 +59,11 @@ val jvmOptions = Seq(
 lazy val common = Seq(
   Compile / unmanagedSourceDirectories += (ThisBuild / baseDirectory).value / "shared" / "main" / "scala",
   Test / unmanagedSourceDirectories += (ThisBuild / baseDirectory).value / "shared" / "test" / "scala",
-  // Shared test logging config, so a green run stays quiet on both backends.
+  // Shared logging config, so a green run stays quiet on both backends. There are
+  // two, and they are not interchangeable: the test one silences the loggers that
+  // report failures the specs asked for, and the main one only exists so `run`
+  // does not start at INFO. See the header of each.
+  Compile / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "shared" / "main" / "resources",
   Test / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "shared" / "test" / "resources",
   libraryDependencies += "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
   // One SparkSession per JVM: tests cannot run in parallel.
@@ -80,6 +84,30 @@ lazy val common = Seq(
   scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked", "-Xlint")
 )
 
+/** Sources that exist to investigate the engines rather than to run a job.
+  *
+  * Everything under `findings/` is reading material: what Sail refuses, where the two engines
+  * disagree, which received wisdom about Spark survives a look at the plan. None of it is needed to
+  * run a pipeline, and a project started from this template should delete it on day one.
+  *
+  * **To delete it all:** remove the `findings/` directory, this function, the two
+  * `.settings(findings(...))` calls below, the `macros` project, and the `.dependsOn(macros)` on
+  * each backend. Nothing in `shared/` or `backend/` refers to any of it.
+  *
+  * It is a source directory rather than its own subproject on purpose. These specs are worth having
+  * precisely because they run against **both** backends, and a subproject would have to depend on
+  * one client or the other — `spark-sql` and `spark-connect-client-jvm` cannot share a classpath. A
+  * directory added to both compiles twice, exactly as `shared/` does.
+  */
+def findings(backend: String) = Seq(
+  Compile / unmanagedSourceDirectories +=
+    (ThisBuild / baseDirectory).value / "findings" / backend / "main" / "scala",
+  Test / unmanagedSourceDirectories ++= Seq(
+    (ThisBuild / baseDirectory).value / "findings" / "shared" / "test" / "scala",
+    (ThisBuild / baseDirectory).value / "findings" / backend / "test" / "scala"
+  )
+)
+
 /** Compile-time translation of a typed lambda into a `Column`.
   *
   * Its own subproject because Scala 2 macros cannot be used in the compilation unit that defines
@@ -89,7 +117,7 @@ lazy val common = Seq(
   * shared API — `Column` and `functions` live there — so the macro compiles once and works against
   * classic and connect alike, which is the whole claim being tested.
   */
-lazy val macros = (project in file("macros"))
+lazy val macros = (project in file("findings/macros"))
   .settings(
     name := "dev-nix-sail-scala-macros",
     libraryDependencies ++= Seq(
@@ -103,6 +131,7 @@ lazy val macros = (project in file("macros"))
 lazy val classic = (project in file("backend/classic"))
   .dependsOn(macros)
   .settings(common)
+  .settings(findings("classic"))
   .settings(
     name := "dev-nix-sail-scala-classic",
     libraryDependencies += "org.apache.spark" %% "spark-sql" % sparkVersion
@@ -114,6 +143,7 @@ lazy val classic = (project in file("backend/classic"))
 lazy val connect = (project in file("backend/connect"))
   .dependsOn(macros)
   .settings(common)
+  .settings(findings("connect"))
   .settings(
     name := "dev-nix-sail-scala-connect",
     libraryDependencies ++= Seq(

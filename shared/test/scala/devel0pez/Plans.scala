@@ -24,6 +24,24 @@ object Plans {
   /** The plan in one of `explain`'s modes: `simple`, `extended`, `formatted`, `cost`. */
   def of(ds: Dataset[_], mode: String): String = capture(ds.explain(mode))
 
+  /** The physical plan with allocation counters stripped, so that two structurally identical plans
+    * compare equal as strings.
+    *
+    * Both engines stamp expressions with a counter that carries no meaning: Catalyst writes
+    * `amount#35` and a `[plan_id=101]` on every exchange, DataFusion writes `#26@0` and `as #26`.
+    * Two plans built from two different `Dataset` values never share those numbers, so comparing
+    * plans without this only ever answers "were these the same object".
+    *
+    * DataFusion's positional `@0` is left alone: that one is an index into the input schema, so it
+    * changes when the shape does, which is exactly what a comparison should notice.
+    */
+  def shape(ds: Dataset[_]): String =
+    of(ds)
+      .replaceAll("\\s+", " ")
+      .replaceAll("#\\d+", "#")
+      .replaceAll("plan_id=\\d+", "plan_id=")
+      .trim
+
   /** How many times a node name appears — a crude but honest measure of plan shape. */
   def count(plan: String, node: String): Int = node.r.findAllIn(plan).size
 

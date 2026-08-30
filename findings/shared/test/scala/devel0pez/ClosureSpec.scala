@@ -18,6 +18,10 @@ import scala.util.Try
   *
   * This spec exists so that claim is checkable rather than remembered. If someone reorders that
   * resolver, the message for four of these changes and this test says so.
+  *
+  * `WirePlanSpec` — connect only, since it reads the request protobuf — carries the other half of
+  * the evidence: `filter` attaches a plan id to the wildcard it hands the UDF and `groupByKey` does
+  * not. The asymmetry is in what the client sends, one step before any engine sees it.
   */
 final class ClosureSpec extends SparkSuite {
 

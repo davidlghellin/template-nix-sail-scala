@@ -31,6 +31,11 @@ trait SparkSuite extends AnyFreeSpec with Matchers with SailSuite with EngineDiv
   // nothing, and neither does the classic suite, so both backends read the
   // test data in the same zone the JVM built it in.
   //
+  // `TimeZoneSpec` is where this is measured rather than asserted, and it
+  // found more than this comment used to claim: a timestamp the engine
+  // *computes* is where the backends part company, because Sail reports the
+  // session zone back and then answers in UTC anyway.
+  //
   // Setting `spark.sql.session.timeZone = UTC` here — which looks like it
   // would make the two agree — makes them disagree instead: the fixtures use
   // `Timestamp.valueOf`, which is local time, so in UTC+1 the cutoff lands on
