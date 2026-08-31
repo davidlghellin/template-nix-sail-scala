@@ -20,10 +20,14 @@ import devel0pez.Conform
   *
   * That moves a whole class of check from run time to compile time. The Python dry-run has to
   * verify that the schema a job produces matches the one the next job consumes; here a `Job[Ciudad,
-  * PoblacionCcaa]` chained onto a `Job[Raw, Ciudad]` either typechecks or does not compile. What is
-  * left for the dry-run is only what a type cannot know — whether the path exists, whether two jobs
-  * claim to produce the same name, whether the chain has a cycle — and `DryRun` does exactly that
-  * and no more.
+  * PoblacionCcaa]` chained onto a `Job[Raw, Ciudad]` either typechecks or does not compile. There
+  * is therefore no dry-run in this codebase at all, which is the clearest measure of what the types
+  * bought.
+  *
+  * What a type still cannot know is checked where it is used rather than in a phase of its own: a
+  * missing path and a CSV header in the wrong order in `Io.read`, two jobs claiming the same output
+  * and a cycle in `Graph`, and the chain as a whole in `EtlChainSpec` — running it *is* the
+  * dry-run.
   *
   * On the name: the obvious one is `Dataset`, which is what Kedro calls it. It is not used here
   * because `org.apache.spark.sql.Dataset` is in scope in every file that would touch this, and two

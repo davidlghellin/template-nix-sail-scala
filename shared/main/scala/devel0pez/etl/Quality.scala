@@ -16,6 +16,13 @@ import org.apache.spark.sql.functions.{col, monotonically_increasing_id, row_num
   */
 object Quality {
 
+  /** A column name derived from `taken`, so it cannot be one of them. */
+  private def freshName(base: String, taken: Set[String]): String = {
+    val start = s"__etl_${base}__"
+    if (!taken.contains(start)) start
+    else Iterator.from(1).map(i => s"__etl_${base}_${i}__").find(!taken.contains(_)).get
+  }
+
   /** Fail when the key has nulls, naming how many.
     *
     * The column is named rather than reached for by field, because a nullable field on a case class
@@ -39,10 +46,18 @@ object Quality {
     * production.
     */
   def deduplicateBy[T](ds: Dataset[T], keyCol: String): Dataset[T] = {
-    val rowId = "__etl_row_id__"
-    val rowNumber = "__etl_row_number__"
     val original = ds.columns.map(col)
     val encoder = ds.encoder
+
+    // The two scratch columns are named against the frame rather than fixed,
+    // and the reason is a silent corruption rather than a clash. `withColumn`
+    // on a name that already exists **replaces** it, and the `select` below
+    // then hands back the replacement — so a dataset that happened to carry a
+    // field called `__etl_row_id__` came out with its values overwritten by the
+    // monotonic ids, no error anywhere. Deriving the name from the columns
+    // present makes that unreachable instead of unlikely.
+    val rowId = freshName("row_id", ds.columns.toSet)
+    val rowNumber = freshName("row_number", ds.columns.toSet + rowId)
 
     ds.withColumn(rowId, monotonically_increasing_id())
       .withColumn(

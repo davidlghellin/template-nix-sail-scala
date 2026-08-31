@@ -114,7 +114,41 @@ object Io {
   */
 final case class Graph(jobs: Seq[Job[_, _]]) {
 
-  /** dataset name -> the job that writes it. */
+  /** Datasets more than one job claims to write.
+    *
+    * A graph with one of these is not a graph with a warning in it, it is a wrong graph: the
+    * mapping below can only hold one producer per name, so the loser vanishes and the edges,
+    * external inputs and both renderings come out describing a chain nobody wrote. It used to do
+    * exactly that in silence — a second job pointed at `ciudades_dedup` dropped `ciudades` from the
+    * picture and left `edges` empty.
+    */
+  def conflicts: Seq[(String, Seq[String])] =
+    jobs
+      .groupBy(_.produces.name)
+      .toSeq
+      .collect { case (name, owners) if owners.size > 1 => name -> owners.map(_.name).sorted }
+      .sortBy(_._1)
+
+  /** This graph, or a failure naming the datasets with more than one producer.
+    *
+    * `Jobs.graph` goes through here, so the ordinary way of getting a graph cannot yield a silently
+    * wrong one. The plain constructor stays unchecked on purpose: a test has to be able to build a
+    * conflicting graph in order to assert what happens to it.
+    */
+  def validated: Graph = {
+    if (conflicts.nonEmpty) {
+      val detail = conflicts
+        .map { case (dataset, owners) => s"$dataset is produced by ${owners.mkString(" and ")}" }
+        .mkString("; ")
+      throw new IllegalArgumentException(s"a dataset can only have one producer: $detail")
+    }
+    this
+  }
+
+  /** dataset name -> the job that writes it.
+    *
+    * Assumes `conflicts` is empty; see `validated` for why that is not left to chance.
+    */
   def producerOf: Map[String, String] =
     jobs.map(job => job.produces.name -> job.name).toMap
 

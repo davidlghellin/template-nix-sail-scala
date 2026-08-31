@@ -7,6 +7,11 @@ import scala.jdk.CollectionConverters._
 import devel0pez.SparkSuite
 import devel0pez.etl.jobs.{Ciudad, Ciudades, Jobs, PoblacionCcaa, PorCcaa}
 
+/** A row carrying a column named exactly like `Quality.deduplicateBy`'s scratch column, so the
+  * collision it used to cause has something to be tested against.
+  */
+final case class Awkward(k: String, __etl_row_id__ : Long, v: Int)
+
 /** The chain, run end to end — which is also the whole of its dry-run.
   *
   * The Python original has a `--dry-run` whose main job is to answer, without starting Spark,
@@ -64,9 +69,30 @@ final class EtlChainSpec extends SparkSuite {
     }
 
     "has exactly one producer per dataset" in {
-      // The check that stops two jobs quietly writing the same place.
-      val producers = Jobs.all.groupBy(_.produces.name).view.mapValues(_.size).toMap
-      producers.filter(_._2 > 1) shouldBe empty
+      Jobs.graph.conflicts shouldBe empty
+    }
+
+    "and refuses to describe a chain where two jobs claim the same output" in {
+      // Found in review, and it failed in the worst way: `producerOf` is a Map,
+      // so the second job simply overwrote the first and the graph came back
+      // describing a chain nobody wrote — `edges` empty, `ciudades` gone, no
+      // error anywhere. `Jobs.graph` is validated now, so the ordinary way of
+      // getting a graph cannot produce that.
+      val clash = new Job[Ciudad, Ciudad] {
+        val name = "clash"
+        val consumes: DataRef[Ciudad] = DataRef[Ciudad]("otra_entrada", "x/y")
+        val produces: DataRef[Ciudad] = Ciudades.produces
+        def transform(input: org.apache.spark.sql.Dataset[Ciudad]) = input
+      }
+      val broken = Graph(Seq(Ciudades, clash))
+
+      broken.conflicts.map(_._1) shouldBe Seq("ciudades_dedup")
+      val refused = intercept[IllegalArgumentException](broken.validated)
+      refused.getMessage should include("only have one producer")
+      refused.getMessage should include("ciudades_dedup")
+
+      // And this is what it was hiding: the unvalidated graph loses an edge.
+      broken.edges shouldBe empty
     }
 
     "still links the two jobs through the dataset they share" in {
@@ -118,6 +144,25 @@ final class EtlChainSpec extends SparkSuite {
 
       val refused = intercept[QualityError](Ciudades.validar(rows).count())
       refused.getMessage should include("has 1 null values")
+    }
+
+    "does not overwrite a column that shares its scratch name" in {
+      val session = spark
+      import session.implicits._
+      // Also found in review. `withColumn` on an existing name replaces it, and
+      // the `select` afterwards handed back the replacement — so these 111 and
+      // 333 came back as 0 and 2, silently. The scratch names are derived from
+      // the frame now, so there is nothing left to collide with.
+      val rows = Seq(
+        Awkward("a", 111L, 1),
+        Awkward("a", 222L, 2),
+        Awkward("b", 333L, 3)
+      ).toDS()
+
+      val out = Quality.deduplicateBy(rows, "k").collect().map(r => r.k -> r.__etl_row_id__).toMap
+      out should have size 2
+      out("a") shouldBe 111L
+      out("b") shouldBe 333L
     }
 
     "keeps the first row per key when deduplicating" in {

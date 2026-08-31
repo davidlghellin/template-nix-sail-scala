@@ -13,5 +13,8 @@ object Jobs {
 
   val all: Seq[Job[_, _]] = Seq(Ciudades, PorCcaa)
 
-  def graph: Graph = Graph(all)
+  /** Validated, so adding a job that collides with another cannot produce a graph that quietly
+    * describes the wrong chain.
+    */
+  def graph: Graph = Graph(all).validated
 }
