@@ -79,6 +79,11 @@ lazy val common = Seq(
   // which on a laptop it always does. This is read early enough to prevent it,
   // and the forked test JVM is exactly the right scope for it.
   Test / envVars += "SPARK_LOCAL_IP" -> "127.0.0.1",
+  // `shared/main` carries a second entry point (`etl.GraphMain`), so `run` has
+  // two `main` methods to choose from and refuses to pick. Naming the default
+  // keeps `run` meaning what it has always meant; the other is still reachable
+  // as `runMain devel0pez.etl.GraphMain`.
+  Compile / mainClass := Some("devel0pez.Main"),
   run / fork := true,
   run / javaOptions ++= jvmOptions,
   scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked", "-Xlint")
@@ -100,6 +105,9 @@ lazy val common = Seq(
   * directory added to both compiles twice, exactly as `shared/` does.
   */
 def findings(backend: String) = Seq(
+  // Only the findings use this, so it is declared here rather than in `common`:
+  // deleting the directory takes the dependency with it.
+  libraryDependencies += "org.typelevel" %% "cats-core" % "2.13.0" % Test,
   Compile / unmanagedSourceDirectories +=
     (ThisBuild / baseDirectory).value / "findings" / backend / "main" / "scala",
   Test / unmanagedSourceDirectories ++= Seq(

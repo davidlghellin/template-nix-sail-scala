@@ -188,13 +188,21 @@
             {
               category = "env";
               name = "clean-all";
-              help = "Delete every target/ and the sbt build cache";
+              help = "Delete every target/, the sbt cache and the Spark warehouse";
               # Every target, not just the root's: the subprojects keep their own,
               # and leaving them behind made this look like it had run when it had
               # only half worked.
+              # The warehouse is here because leaving it out cost a debugging
+              # session. `DROP TABLE` removes the catalogue entry and the data,
+              # but a write that failed part-way leaves a `_temporary` directory,
+              # and a leftover directory makes the next `CREATE TABLE` fail with
+              # LOCATION_ALREADY_EXISTS — aborting a whole suite for reasons that
+              # have nothing to do with the code under test.
               command = ''rm -rf "$PRJ_ROOT"/target "$PRJ_ROOT"/project/target \
-                "$PRJ_ROOT"/project/project "$PRJ_ROOT"/macros/target \
-                "$PRJ_ROOT"/backend/*/target'';
+                "$PRJ_ROOT"/project/project "$PRJ_ROOT"/findings/macros/target \
+                "$PRJ_ROOT"/backend/*/target \
+                "$PRJ_ROOT"/spark-warehouse "$PRJ_ROOT"/metastore_db \
+                "$PRJ_ROOT"/derby.log'';
             }
           ];
 
