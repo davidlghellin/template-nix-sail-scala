@@ -19,7 +19,7 @@ structurally cannot hold it: that suite is Python and PySpark, and a Scala
 `Dataset.map` cannot be expressed from there. If you work on Sail, this is
 probably the part you want.
 
-**A research spike**, isolated in `findings/macros/`: can a typed lambda be translated
+**A research spike**, isolated in `macros/`: can a typed lambda be translated
 into a `Column` at compile time? It works, and the section on it explains why
 that still does not solve the problem.
 
@@ -57,45 +57,58 @@ The closures live only in the specs that exist to show what they cost.
 ├── versions.json             # the single source of truth: Scala, Spark, pysail
 ├── flake.nix                 # devshell: JDK 21, sbt, scalafmt and the Sail server
 ├── build.sbt                 # two subprojects, one per backend
-├── shared/                   # the code and tests that know nothing of backends
-│   ├── main/scala/devel0pez/ #   Calculator, DataFrames, BaseCase, TypedEtl,
-│   │                         #   PipelineEtl, ConformedEtl, MeterEtl, Conform,
-│   │                         #   Storage, Model, Demo
-│   └── test/scala/devel0pez/ #   the specs, which run twice
-├── backend/
-│   ├── classic/              # classic Spark on the local JVM
-│   └── connect/              # Sail, over Spark Connect
-└── findings/                 # DELETE THIS to get the template back
-    ├── shared/test/          #   what Sail refuses, where the engines differ,
-    │                         #   which best practices survive the plan
-    ├── classic/test/         #   plan inspection that only compiles on classic
-    ├── connect/{main,test}/  #   the request protobuf, and the client-side guard
-    └── macros/               #   the spike: lambda -> Column at compile time
+├── macros/                   # the spike: lambda -> Column at compile time
+├── etl/                      # the domain, and every spec that runs on BOTH
+│   ├── src/main/scala/       #   Conform, Storage, Model, the ETLs, etl/
+│   └── src/test/scala/       #   161 specs, compiled once, run twice
+├── template-classic/         # classic only: SparkContext, queryExecution
+└── template-connect/         # Sail only: the wire plan, the closure guard
 ```
 
-## Two halves, and one of them is deletable
+## One compilation, two runs
 
-This repository is a template with a research project attached, and the second
-half has grown larger than the first. So it is fenced off rather than mixed in:
-everything that exists to *investigate* the engines lives under `findings/`, and
-nothing outside it refers to anything inside it.
+The backend is a run-time choice, exactly as `SPARK_BACKEND=pysail|pyspark` is in
+the Python template:
 
-Start a project from this and `rm -rf findings` on day one, plus five edits in
-`build.sbt` that `findings/README.md` spells out and that have been verified by
-applying them to a copy and running the suite. What is left is the flake, the
-dual-backend build, `Conform`, `Storage`, `Model`, six ETLs and their specs —
-82 tests on classic and 83 on Sail, still green.
+```bash
+sbt test                        # classic Spark, the default
+SPARK_BACKEND=connect sbt test  # Sail, over Spark Connect
+```
 
-Keep it and you get the other 141 and 150, which are the reason most of this
-README exists. The split is a source directory rather than a subproject on
-purpose: the specs are worth having because the same assertions run against both
-engines, and a subproject would have to pick a client.
+The same 161 specs run both ways. They are compiled **once**, which is worth
+saying because for most of this project's life they were compiled twice, once
+against each client, on the belief that `spark-sql` and `spark-connect-client-jvm`
+could not share a classpath: both ship `org.apache.spark.sql.SparkSession`.
+
+Measured on 4.2.0, that belief is wrong. They do both ship it and it is the same
+class, byte for byte, repackaged from `spark-sql-api`; the implementations live
+at `org.apache.spark.sql.classic.SparkSession` and
+`org.apache.spark.sql.connect.SparkSession`, which do not collide. One module
+compiles and runs against either, and [SparkSuite](etl/src/test/scala/devel0pez/SparkSuite.scala)
+picks which at run time.
+
+There is one catch and it is worth knowing: the generic `SparkSession.builder()`
+resolves to **classic** when both clients are present, and refuses a remote with
+`spark.connect.remote configuration is not supported in Classic mode`. Naming the
+concrete builder is what sidesteps it — and is why `sail-testkit`'s `SailSuite`
+mixin is not used here, since it calls the generic one.
+
+`template-classic` and `template-connect` hold the specs that only make sense
+against one engine, and each runs only under its own `SPARK_BACKEND`. That is not
+skipping something inconvenient: `SchedulerSpec` is about `SparkContext`, which
+the Connect client does not have, and `WirePlanSpec` reads a request protobuf
+that classic never produces.
 
 ## Getting started
 
+### With Nix
+
+Everything the project needs comes from the flake — JDK 21, sbt, scalafmt and the
+Sail server — so there is nothing to install and nothing to configure:
+
 ```bash
-nix develop        # JDK, sbt and the Sail server, all in place
-t                  # the tests against BOTH backends
+nix develop        # or nothing at all, with direnv
+t                  # the tests against BOTH engines
 tc                 # classic Spark only
 ts                 # Sail only
 f                  # format with scalafmt
@@ -106,30 +119,59 @@ With [direnv](https://direnv.net) the first line is not needed: `.envrc` says
 
 ```bash
 direnv allow       # once per clone
-cd .               # JDK 21, sbt, scalafmt and sail, already on the PATH
 ```
+
+### Without Nix
+
+Four things, and the first is not optional:
+
+| | |
+| --- | --- |
+| **JDK 21** | Spark 4 needs 17 or newer, and this project pins 21. `build.sbt` follows `JAVA_HOME`, so point it at a 21 and nothing else needs saying. |
+| **sbt** | any recent 1.x; it fetches the Scala version [versions.json](versions.json) names |
+| **Python 3** | only for the Sail backend, to install the server |
+| **Sail** | `python -m venv .venv-sail && .venv-sail/bin/pip install pysail==<pysail> pyspark==<spark>`, versions from [versions.json](versions.json), then put `.venv-sail/bin` on `PATH` |
+
+Then:
+
+```bash
+sbt test                        # classic Spark — needs nothing from the last two rows
+SPARK_BACKEND=connect sbt test  # Sail
+sbt scalafmtCheckAll
+```
+
+The classic backend needs only the first two rows. Scala itself is never
+installed by hand either way.
+
+### There is nothing to configure
+
+No local file to copy, no path to edit, no profile to pick. [versions.json](versions.json)
+is the single source of truth for Scala, Spark, pysail and the test kit, and both
+`flake.nix` and `build.sbt` read it — so bumping Spark in one place cannot leave
+the Sail server on a version that no longer matches it.
+
+The only knob is `SPARK_BACKEND`, and it defaults to `classic`.
 
 ### The rest of the commands
 
-The devshell defines eleven, and `menu` lists them at any time. The four above
+The devshell defines twelve, and `menu` lists them at any time. The four above
 are the ones you type all day; these are the ones worth knowing about before you
 reach for something slower.
 
 ```bash
-tt BaseCaseSpec    # one suite, against both backends — the inner loop
+tt BaseCaseSpec    # one suite — the inner loop
 c                  # compile main and test without running anything
-cscala             # Scala REPL with Spark and the project (classic; `cscala connect` too)
-run-demo           # run the demo (classic; `run-demo connect` needs a server up)
+cscala             # Scala REPL with Spark and the project on the classpath
+run-demo           # run the demo on classic
 sail-server        # a Sail server in the foreground on :50051, to poke at by hand
 fc                 # check formatting without rewriting (what CI runs)
-clean-all          # delete every target/ and the sbt build cache
+clean-all          # every target/, the sbt cache and the Spark warehouse
 check-commands     # smoke-test the commands in this menu (CI runs it)
 ```
 
-`cscala` and `run-demo` name a backend because the root project only aggregates:
+`run-demo` and `cscala` name a module because the root project only aggregates:
 it has no sources and no dependencies, so `sbt run` there finds no main class and
-its REPL has neither Spark nor the project on the classpath. Both default to
-`classic`, which needs nothing else running.
+its REPL has neither Spark nor the project on the classpath.
 
 `tt` is the one that changes how the day feels: a full `t` pays for two Spark
 sessions and every suite, while `tt ConformSpec` is seconds. `cscala` is the
@@ -147,26 +189,158 @@ Two caveats, both of which look like the environment is broken when they hit:
 
 ## IntelliJ
 
-Launch it **from inside the devshell**, or it inherits whatever `JAVA_HOME` the
-desktop session has:
+Two things have to be true before the IDE is any use here: it must run on **JDK
+21**, and it must be able to find the shared sources. Neither is automatic, and
+the second used to be impossible — see the last part.
+
+### What you need
+
+**With Nix**, everything but the IDE comes from the flake:
 
 ```bash
-idea .             # with direnv active in this directory
-nix develop -c idea .   # without direnv
+nix develop -c idea .          # or `idea .` with direnv active
 ```
 
-The alternative is the Direnv plugin. Either way, check `⌘;` → Project → SDK
-says **21**, and Settings → Build Tools → sbt → JRE too: the sbt importer writes
-the JDK it was started with into `.idea/misc.xml` and `.bsp/sbt.json`, and a
-project imported once on Java 11 keeps it until you reimport.
+Launching from inside the devshell matters because IntelliJ inherits the
+environment of whatever started it. Opened from Finder, the Dock or Spotlight it
+inherits `launchd`'s, which has neither the flake nor a JDK 21 — and `open -a`
+goes through `launchd` too, so it is no better. If `idea` is not on your `PATH`,
+the launcher lives inside the app (`/Applications/IntelliJ IDEA
+CE.app/Contents/MacOS/idea`); JetBrains Toolbox can also generate it.
 
-One more thing about running the specs from the IDE gutter: IntelliJ's own
-ScalaTest runner **ignores** `Test / javaOptions`, so the `--add-opens` flags in
-[build.sbt](build.sbt) never reach the test JVM and the first `collect()` fails
-with `InaccessibleObjectException`. `CalculatorSpec` does not care — it needs no
-session — but everything extending `SparkSuite` does. Either tick Settings →
-Build Tools → sbt → *use sbt shell for builds and tests*, or copy those flags
-into the run configuration's VM options.
+**Without Nix**, install these yourself and any launch method works:
+
+| | |
+| --- | --- |
+| JDK 21 | Spark 4 needs 17+; this project pins 21, and `javaHome` in [build.sbt](build.sbt) follows `JAVA_HOME` |
+| sbt | IntelliJ bundles a launcher, so this is only needed for the terminal |
+| Scala plugin | the one plugin that is not optional |
+| `pysail` + `pyspark` | **only for the connect backend**: `python -m venv .venv-sail && .venv-sail/bin/pip install pysail==<pysail> pyspark==<spark>`, versions from [versions.json](versions.json), then put `.venv-sail/bin` on `PATH` so the testkit can find `sail` |
+
+The classic backend needs none of that last row. Scala itself is never installed
+by hand either way — sbt fetches the version [versions.json](versions.json)
+names.
+
+### Registering the JDK, which is the step people skip
+
+Launching from the devshell sets `JAVA_HOME`, and IntelliJ still may not use it.
+The project SDK comes from IntelliJ's own **JDK table**, which is global config
+in `~/Library/Application Support/JetBrains/<IDE>/options/jdk.table.xml` — so it
+survives deleting `.idea`, and if it holds no 21 the import silently falls back
+to the newest JDK it does know. A project imported that way builds nothing and
+blames your code.
+
+So add it explicitly: `⌘;` → Platform Settings → SDKs → `+` → *Add JDK…*, and
+paste what the devshell reports:
+
+```bash
+nix develop -c bash -c 'echo $JAVA_HOME'
+```
+
+Then set it in **both** places, because they are separate settings: Project
+Structure → Project → SDK, and Build Tools → sbt → JRE. The second is the one
+that fixes `.bsp/sbt.json`.
+
+That path is a Nix store path with a hash in it, so it stops existing when the
+flake's JDK is bumped and the registration has to be repeated. Without Nix the
+path is whatever your JDK 21 install uses and it stays put.
+
+### The one setting you have to change
+
+Spark reaches into JDK internals by reflection, and Java has sealed those since
+17. The `--add-opens` flags in [build.sbt](build.sbt) reopen them; `spark-submit`
+adds them for you, and outside it somebody has to. sbt does, on the JVM it forks
+— which is why `sbt test` is green. IntelliJ's own test runner starts its own JVM
+and knows nothing about `Test / javaOptions`, so a spec run from the gutter dies:
+
+- `IllegalAccessException: class sun.util.calendar.ZoneInfo is not accessible`,
+  wrapped by Spark as `EXPRESSION_DECODING_FAILED`, on anything with a timestamp;
+- `sun.misc.Unsafe or java.nio.DirectByteBuffer.<init> not available` from Arrow,
+  on anything that talks to Sail.
+
+Two ways to have working run configurations, and you probably want both.
+
+**Shipped with the repo.** `.idea/runConfigurations/` holds *All tests (classic)*
+and *All tests (Sail)*, with the flags and `SPARK_BACKEND` already set. They are
+the one part of `.idea/` that is not gitignored, so they work on a fresh clone
+with nothing configured. Pick one from the dropdown by the run button.
+
+**For the gutter icons**, which create their own configuration each time, the
+template has to carry the flags: Run → Edit Configurations… → *Edit configuration
+templates…* → **ScalaTest** → **VM options**, and paste
+
+```
+--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false -Dio.netty.tryReflectionSetAccessible=true
+```
+
+That is per-user and cannot be shipped: templates live in `.idea/workspace.xml`,
+which holds personal state and is gitignored everywhere for good reason. Existing
+temporary configurations do not pick it up either — delete them first, since they
+are reused verbatim rather than re-derived.
+
+Two things that look like they should work and do not, both tried here:
+
+- **`JAVA_TOOL_OPTIONS` from the devshell.** It does fix the tests — it is the
+  only way to reach a JVM you do not launch — and it also reaches IntelliJ's own
+  Scala compile server, which then dies on startup. The IDE warns about it
+  explicitly.
+- **Writing the template into `.idea/workspace.xml` by hand.** IntelliJ
+  normalises the file on startup and drops the option. Only its own dialogs
+  persist.
+
+### Ordinary modules, and why that took some getting to
+
+Every module here has an ordinary layout — `src/main/scala`, `src/test/scala`,
+inside its own directory — and nothing points at sources outside itself. That is
+the whole of the IDE setup, and it is deliberate.
+
+It was not always so. The shared code lived in a neutral `shared/` directory
+added to two backend modules as a source directory, which sbt compiles without
+blinking. IntelliJ cannot represent it: its sbt importer keeps a source directory
+only when it sits **inside the module's base directory**, so those files belonged
+to no module, the editor could not resolve them, and there was no way to run a
+spec from the gutter. The obvious guess — two modules fighting over one directory
+— is wrong; a directory declared by one module alone was dropped just the same.
+Only the base directory matters.
+
+Collapsing to run-time backend selection removed the reason for the split, and
+with it the problem.
+
+## VS Code
+
+Install **Metals** (`.vscode/extensions.json` recommends it, so VS Code offers it
+on first open) and launch the editor from inside the devshell, for the same
+reason IntelliJ needs it — the editor inherits `JAVA_HOME` from whatever started
+it:
+
+```bash
+nix develop -c code .      # or just `code .` with direnv active
+```
+
+Metals drives the build over BSP, and the BSP server here is sbt itself, so
+compiling and running tests go through the same settings `sbt test` uses —
+including the forked JVM and its `--add-opens`. That is the part IntelliJ's own
+runner does not do, and why there is less to configure here.
+
+`.vscode/launch.json` ships anyway, with the flags spelled out, so that Run and
+Debug work whichever way Metals decides to start a JVM:
+
+| | |
+| --- | --- |
+| *Demo (classic)* | `devel0pez.Main` on the local JVM |
+| *Demo (Sail)* | the same against Sail — needs `sail-server` running first |
+| *Graph* | prints the ETL chain, no session |
+| *Test: all (classic)* / *(Sail)* | every shared spec, one engine each |
+| *Test: the file open in the editor* | the spec you are looking at |
+
+Each one sets `SPARK_BACKEND` and carries the same sixteen flags as
+[build.sbt](build.sbt), generated from it rather than copied, so the two cannot
+drift.
+
+Debugging works the usual way: a breakpoint in a spec, then *Run and Debug* with
+one of the test configurations. Breakpoints inside a closure passed to `map` or
+`filter` will only be hit on classic — on Sail that code never runs on this JVM,
+which is the whole point of `ClosureSpec`.
 
 ## MeterEtl: the one to copy
 
@@ -227,7 +401,7 @@ time**. `spark-sql` and `spark-connect-client-jvm` both ship the class
 `org.apache.spark.sql.SparkSession`, so they cannot share a classpath. Hence the
 two subprojects.
 
-What is **not** duplicated is the code: `shared/` is compiled twice, once
+What is **not** duplicated is the code: `etl/` is compiled once and run twice,
 against each client. Spark 4 moved the common API into `spark-sql-api`, so the
 same transformations and **the same specs** serve both. Only where the session
 comes from changes:
@@ -893,7 +1067,7 @@ chained `withColumn` used to claim the nesting reached the executed query. It
 does not — Catalyst collapses it — and the numbers live in `ClassicPlanSpec` now
 rather than in anybody's memory.
 
-It sits in `findings/classic/test` rather than alongside the shared specs, and the
+It sits in `template-classic` rather than alongside the shared specs, and the
 reason is a category of divergence the rest of this README does not cover.
 `perEngine` and `failsOnSail` handle engines that *behave* differently at run
 time. Connect's `QueryExecution` is a different class without `analyzed` or
@@ -955,7 +1129,7 @@ for*, because by the time `explain` speaks the request has already been
 interpreted — and when the engines disagree, which of them invented the
 difference is exactly the question. `WirePlan.of(ds)` is the other end: the
 request protobuf, read locally, with no server and nothing executed. There is no
-classic equivalent and there cannot be, so it lives in `backend/connect`.
+classic equivalent and there cannot be, so it lives in `template-connect`.
 
 It paid for itself immediately. `ClosureSpec` had long recorded that Sail names
 `groupByKey` accurately (`Scala UDF is not supported yet`) and reports the other

@@ -116,20 +116,20 @@
             {
               category = "test";
               name = "t";
-              help = "Run the whole suite against both backends";
-              command = ''sbt -batch classic/test connect/test "$@"'';
+              help = "Run the whole suite against both engines";
+              command = ''sbt -batch test "$@" && SPARK_BACKEND=connect sbt -batch test "$@"'';
             }
             {
               category = "test";
               name = "tc";
               help = "Test against classic Spark on the local JVM";
-              command = ''sbt -batch classic/test "$@"'';
+              command = ''sbt -batch test "$@"'';
             }
             {
               category = "test";
               name = "ts";
               help = "Test against Sail over Spark Connect";
-              command = ''sbt -batch connect/test "$@"'';
+              command = ''SPARK_BACKEND=connect sbt -batch test "$@"'';
             }
             {
               category = "console";
@@ -152,20 +152,20 @@
             {
               category = "build";
               name = "run-demo";
-              help = "Run the demo, e.g. run-demo (classic) or run-demo connect";
+              help = "Run the demo on classic; run-demo templateConnect needs a server up";
               # The root project aggregates and has no sources, so `sbt run` there
               # finds no main class. Each backend has its own `Main`; classic is
               # the default because it needs no server running.
-              command = ''sbt -batch "''${1:-classic}/run"'';
+              command = ''sbt -batch "''${1:-templateClassic}/run"'';
             }
             {
               category = "console";
               name = "cscala";
-              help = "Scala REPL with Spark and the project, e.g. cscala (classic) or cscala connect";
+              help = "Scala REPL with Spark and the project on the classpath";
               # Must name a backend: the root project declares no dependencies, so
               # its console has neither Spark nor the project on the classpath —
               # `import org.apache.spark.sql.SparkSession` fails there.
-              command = ''sbt "''${1:-classic}/console"'';
+              command = ''sbt "''${1:-etl}/console"'';
             }
             {
               category = "lint";
@@ -199,8 +199,8 @@
               # LOCATION_ALREADY_EXISTS — aborting a whole suite for reasons that
               # have nothing to do with the code under test.
               command = ''rm -rf "$PRJ_ROOT"/target "$PRJ_ROOT"/project/target \
-                "$PRJ_ROOT"/project/project "$PRJ_ROOT"/findings/macros/target \
-                "$PRJ_ROOT"/backend/*/target \
+                "$PRJ_ROOT"/project/project "$PRJ_ROOT"/macros/target \
+                "$PRJ_ROOT"/etl/target "$PRJ_ROOT"/template-*/target \
                 "$PRJ_ROOT"/spark-warehouse "$PRJ_ROOT"/metastore_db \
                 "$PRJ_ROOT"/derby.log'';
             }

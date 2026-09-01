@@ -2,16 +2,12 @@ ThisBuild / scalaVersion := versionOf("scala")
 ThisBuild / version := "0.1.0"
 ThisBuild / organization := "devel0pez"
 
-// sbt forks its JVMs (compile and test) from the one that launched it, not
-// from JAVA_HOME. Nixpkgs packages sbt with a JDK of its own, which is not the
-// devshell's, so the shell has to win: pin it by hand.
+// sbt forks its JVMs from the one that launched it, not from JAVA_HOME, and
+// nixpkgs packages sbt with a JDK of its own. The devshell has to win.
 ThisBuild / javaHome := sys.env.get("JAVA_HOME").map(file)
 
-// Versions come from versions.json, which flake.nix reads too. Sail derives
-// its Spark configuration from the **client** version, so bumping Spark here
-// without bumping pysail there would pull them apart; with a single source
-// that cannot happen. Scala 2.13 is not a choice: Spark 4 only publishes
-// artifacts for 2.13.
+// Single source of truth, read by flake.nix too: Sail takes its Spark
+// configuration from the client version, so the two cannot drift apart.
 def versionOf(key: String): String = {
   val json = IO.read(file("versions.json"))
   val re = ("\"" + key + "\"\\s*:\\s*\"([^\"]+)\"").r
@@ -21,16 +17,13 @@ def versionOf(key: String): String = {
 }
 
 val sparkVersion = versionOf("spark")
+val backend = sys.env.getOrElse("SPARK_BACKEND", "classic")
 val scalaTestVersion = "3.2.19"
 
-// Spark and Arrow reach into JDK internals by reflection, and those have been
-// sealed since Java 17. `spark-submit` adds these flags on your behalf; when
-// you launch from sbt nobody does, and the first `collect()` dies with
-// InaccessibleObjectException (classic) or with "sun.misc.Unsafe not
-// available" from Arrow (connect). They are needed at run time, not at
-// compile time, which is why they hang off `javaOptions` and not
-// `scalacOptions`, and why a build that compiles fine can still fail on its
-// first row.
+// Spark and Arrow reach into JDK internals by reflection, sealed since Java 17.
+// `spark-submit` adds these for you; sbt does not, and the first `collect()`
+// dies with InaccessibleObjectException or Arrow's "sun.misc.Unsafe not
+// available". Needed at run time, so `javaOptions` rather than `scalacOptions`.
 val jvmOptions = Seq(
   "--add-opens=java.base/java.lang=ALL-UNNAMED",
   "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
@@ -50,82 +43,58 @@ val jvmOptions = Seq(
   "-Dio.netty.tryReflectionSetAccessible=true"
 )
 
-// The domain code and its tests are **the same** for both backends: they are
-// compiled twice, once against each Spark client. This is the equivalent of
-// `SPARK_BACKEND=pysail|pyspark` in the Python template, except that there the
-// choice is made at run time and here at compile time, because `spark-sql` and
-// `spark-connect-client-jvm` cannot share a classpath: both ship
-// `org.apache.spark.sql.SparkSession`.
+// Both clients on one classpath, and the backend chosen at run time:
+//
+//   sbt test                          # classic
+//   SPARK_BACKEND=connect sbt test    # Sail, over Spark Connect
+//
+// They coexist because the `org.apache.spark.sql.SparkSession` both ship is the
+// same class repackaged from `spark-sql-api`; the implementations are
+// `sql.classic.SparkSession` and `sql.connect.SparkSession`. `SparkSuite` names
+// the concrete builder, because the generic one picks classic and then refuses
+// `.remote(...)`.
 lazy val common = Seq(
-  Compile / unmanagedSourceDirectories += (ThisBuild / baseDirectory).value / "shared" / "main" / "scala",
-  Test / unmanagedSourceDirectories += (ThisBuild / baseDirectory).value / "shared" / "test" / "scala",
-  // Shared logging config, so a green run stays quiet on both backends. There are
-  // two, and they are not interchangeable: the test one silences the loggers that
-  // report failures the specs asked for, and the main one only exists so `run`
-  // does not start at INFO. See the header of each.
-  Compile / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "shared" / "main" / "resources",
-  Test / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "shared" / "test" / "resources",
-  libraryDependencies += "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-  // One SparkSession per JVM: tests cannot run in parallel.
+  libraryDependencies ++= Seq(
+    "org.apache.spark" %% "spark-sql" % sparkVersion,
+    "org.apache.spark" %% "spark-connect-client-jvm" % sparkVersion,
+    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+    "org.typelevel" %% "cats-core" % "2.13.0" % Test,
+    "com.devel0pez" %% "sail-testkit" % versionOf("testkit") % Test
+  ),
+  // One SparkSession per JVM.
   Test / parallelExecution := false,
   Test / fork := true,
-  // A forked test JVM would start in its subproject's directory; pin it to the
-  // root so that paths like versions.json mean the same thing from either
-  // backend.
+  // A forked JVM starts in its own directory; pin it so `versions.json` and
+  // `resources/` mean the same thing from every module.
   Test / baseDirectory := (ThisBuild / baseDirectory).value,
   Test / javaOptions ++= jvmOptions,
-  // Spark resolves the machine's hostname while `Utils` loads — before any
-  // session config can be applied — and warns twice when it maps to loopback,
-  // which on a laptop it always does. This is read early enough to prevent it,
-  // and the forked test JVM is exactly the right scope for it.
+  // Read while `Utils` loads, before any session config applies.
   Test / envVars += "SPARK_LOCAL_IP" -> "127.0.0.1",
-  // `shared/main` carries a second entry point (`etl.GraphMain`), so `run` has
-  // two `main` methods to choose from and refuses to pick. Naming the default
-  // keeps `run` meaning what it has always meant; the other is still reachable
-  // as `runMain devel0pez.etl.GraphMain`.
-  Compile / mainClass := Some("devel0pez.Main"),
+  // A forked JVM does not inherit the shell's environment.
+  Test / envVars += "SPARK_BACKEND" -> sys.env.getOrElse("SPARK_BACKEND", "classic"),
+  // The Sail server binary. The devshell puts `.venv-sail/bin` on PATH, but sbt
+  // started by an IDE's build server may not have inherited it, and the testkit
+  // then fails with "Could not run 'sail'". Naming the binary outright works
+  // whatever launched sbt; an explicit SAIL_BIN still wins.
+  Test / envVars ++= {
+    val bundled = (ThisBuild / baseDirectory).value / ".venv-sail" / "bin" / "sail"
+    sys.env
+      .get("SAIL_BIN")
+      .orElse(if (bundled.exists()) Some(bundled.getAbsolutePath) else None)
+      .map(path => Map("SAIL_BIN" -> path))
+      .getOrElse(Map.empty[String, String])
+  },
   run / fork := true,
   run / javaOptions ++= jvmOptions,
   scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked", "-Xlint")
 )
 
-/** Sources that exist to investigate the engines rather than to run a job.
-  *
-  * Everything under `findings/` is reading material: what Sail refuses, where the two engines
-  * disagree, which received wisdom about Spark survives a look at the plan. None of it is needed to
-  * run a pipeline, and a project started from this template should delete it on day one.
-  *
-  * **To delete it all:** remove the `findings/` directory, this function, the two
-  * `.settings(findings(...))` calls below, the `macros` project, and the `.dependsOn(macros)` on
-  * each backend. Nothing in `shared/` or `backend/` refers to any of it.
-  *
-  * It is a source directory rather than its own subproject on purpose. These specs are worth having
-  * precisely because they run against **both** backends, and a subproject would have to depend on
-  * one client or the other — `spark-sql` and `spark-connect-client-jvm` cannot share a classpath. A
-  * directory added to both compiles twice, exactly as `shared/` does.
-  */
-def findings(backend: String) = Seq(
-  // Only the findings use this, so it is declared here rather than in `common`:
-  // deleting the directory takes the dependency with it.
-  libraryDependencies += "org.typelevel" %% "cats-core" % "2.13.0" % Test,
-  Compile / unmanagedSourceDirectories +=
-    (ThisBuild / baseDirectory).value / "findings" / backend / "main" / "scala",
-  Test / unmanagedSourceDirectories ++= Seq(
-    (ThisBuild / baseDirectory).value / "findings" / "shared" / "test" / "scala",
-    (ThisBuild / baseDirectory).value / "findings" / backend / "test" / "scala"
-  )
-)
-
 /** Compile-time translation of a typed lambda into a `Column`.
   *
-  * Its own subproject because Scala 2 macros cannot be used in the compilation unit that defines
-  * them: the macro has to be compiled and on the classpath before anything expands it.
-  *
-  * It depends on `spark-sql-api` rather than on either client. That module is where Spark 4 put the
-  * shared API — `Column` and `functions` live there — so the macro compiles once and works against
-  * classic and connect alike, which is the whole claim being tested.
+  * Its own module because a Scala 2 macro cannot be used in the unit that defines it. Built against
+  * `spark-sql-api`, so it works against either client.
   */
-lazy val macros = (project in file("findings/macros"))
+lazy val macros = (project in file("macros"))
   .settings(
     name := "dev-nix-sail-scala-macros",
     libraryDependencies ++= Seq(
@@ -135,36 +104,38 @@ lazy val macros = (project in file("findings/macros"))
     scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
   )
 
-/** Classic Spark on the local JVM. The equivalent of `SPARK_BACKEND=pyspark`. */
-lazy val classic = (project in file("backend/classic"))
+/** The domain, and every spec that runs against **both** engines. */
+lazy val etl = (project in file("etl"))
   .dependsOn(macros)
   .settings(common)
-  .settings(findings("classic"))
+  .settings(name := "dev-nix-sail-scala-etl")
+
+/** Classic only: the local-JVM entry point, and the specs that reach for `SparkContext` or
+  * `queryExecution` — neither of which the Connect client has.
+  */
+lazy val templateClassic = (project in file("template-classic"))
+  .dependsOn(macros, etl, etl % "test->test")
+  .settings(common)
   .settings(
     name := "dev-nix-sail-scala-classic",
-    libraryDependencies += "org.apache.spark" %% "spark-sql" % sparkVersion
+    // Runs only under its own backend. These specs are not "skipped when
+    // inconvenient" — they are about a client the other run does not have.
+    Test / testOptions ++= (if (backend == "classic") Nil else Seq(Tests.Filter(_ => false)))
   )
 
-/** The Spark Connect client, which is how you talk to Sail from the JVM. The equivalent of
-  * `SPARK_BACKEND=pysail`.
+/** Sail only: the Connect entry point, the request-protobuf reader and the client-side closure
+  * guard, with their specs.
   */
-lazy val connect = (project in file("backend/connect"))
-  .dependsOn(macros)
+lazy val templateConnect = (project in file("template-connect"))
+  .dependsOn(macros, etl, etl % "test->test")
   .settings(common)
-  .settings(findings("connect"))
   .settings(
     name := "dev-nix-sail-scala-connect",
-    libraryDependencies ++= Seq(
-      "org.apache.spark" %% "spark-connect-client-jvm" % sparkVersion,
-      // Starting a Sail server from the JVM is not this template's job. The
-      // kit does it, and using it here is also how we find out whether its
-      // API is pleasant from the outside.
-      "com.devel0pez" %% "sail-testkit" % versionOf("testkit") % Test
-    )
+    Test / testOptions ++= (if (backend == "connect") Nil else Seq(Tests.Filter(_ => false)))
   )
 
 lazy val root = (project in file("."))
-  .aggregate(macros, classic, connect)
+  .aggregate(macros, etl, templateClassic, templateConnect)
   .settings(
     name := "dev-nix-sail-scala",
     publish / skip := true
