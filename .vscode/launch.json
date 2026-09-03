@@ -1,0 +1,185 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "scala",
+      "request": "launch",
+      "name": "Demo (classic)",
+      "jvmOptions": [
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        "-Djdk.reflect.useDirectMethodHandle=false",
+        "-Dio.netty.tryReflectionSetAccessible=true"
+      ],
+      "env": {
+        "SPARK_BACKEND": "classic",
+        "SPARK_LOCAL_IP": "127.0.0.1",
+        "SAIL_BIN": "${workspaceFolder}/.venv-sail/bin/sail"
+      },
+      "mainClass": "devel0pez.Main",
+      "buildTarget": "templateClassic"
+    },
+    {
+      "type": "scala",
+      "request": "launch",
+      "name": "Demo (Sail) \u2014 needs sail-server running",
+      "jvmOptions": [
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        "-Djdk.reflect.useDirectMethodHandle=false",
+        "-Dio.netty.tryReflectionSetAccessible=true"
+      ],
+      "env": {
+        "SPARK_BACKEND": "connect",
+        "SPARK_LOCAL_IP": "127.0.0.1",
+        "SAIL_BIN": "${workspaceFolder}/.venv-sail/bin/sail"
+      },
+      "mainClass": "devel0pez.Main",
+      "buildTarget": "templateConnect"
+    },
+    {
+      "type": "scala",
+      "request": "launch",
+      "name": "Graph",
+      "jvmOptions": [
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        "-Djdk.reflect.useDirectMethodHandle=false",
+        "-Dio.netty.tryReflectionSetAccessible=true"
+      ],
+      "env": {
+        "SPARK_BACKEND": "classic",
+        "SPARK_LOCAL_IP": "127.0.0.1",
+        "SAIL_BIN": "${workspaceFolder}/.venv-sail/bin/sail"
+      },
+      "mainClass": "devel0pez.etl.GraphMain",
+      "buildTarget": "etl"
+    },
+    {
+      "type": "scala",
+      "request": "launch",
+      "name": "Test: all (classic)",
+      "jvmOptions": [
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        "-Djdk.reflect.useDirectMethodHandle=false",
+        "-Dio.netty.tryReflectionSetAccessible=true"
+      ],
+      "env": {
+        "SPARK_BACKEND": "classic",
+        "SPARK_LOCAL_IP": "127.0.0.1",
+        "SAIL_BIN": "${workspaceFolder}/.venv-sail/bin/sail"
+      },
+      "testClass": "devel0pez.*",
+      "buildTarget": "etl"
+    },
+    {
+      "type": "scala",
+      "request": "launch",
+      "name": "Test: all (Sail)",
+      "jvmOptions": [
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        "-Djdk.reflect.useDirectMethodHandle=false",
+        "-Dio.netty.tryReflectionSetAccessible=true"
+      ],
+      "env": {
+        "SPARK_BACKEND": "connect",
+        "SPARK_LOCAL_IP": "127.0.0.1",
+        "SAIL_BIN": "${workspaceFolder}/.venv-sail/bin/sail"
+      },
+      "testClass": "devel0pez.*",
+      "buildTarget": "etl"
+    },
+    {
+      "type": "scala",
+      "request": "launch",
+      "name": "Test: the file open in the editor",
+      "jvmOptions": [
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        "-Djdk.reflect.useDirectMethodHandle=false",
+        "-Dio.netty.tryReflectionSetAccessible=true"
+      ],
+      "env": {
+        "SPARK_BACKEND": "classic",
+        "SPARK_LOCAL_IP": "127.0.0.1",
+        "SAIL_BIN": "${workspaceFolder}/.venv-sail/bin/sail"
+      },
+      "testClass": "devel0pez.${fileBasenameNoExtension}",
+      "buildTarget": "etl"
+    }
+  ]
+}

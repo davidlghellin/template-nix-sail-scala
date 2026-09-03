@@ -1,0 +1,14 @@
+{
+  "metals.defaultBspToBuildTool": true,
+  "metals.testUserInterface": "Test Explorer",
+  "files.watcherExclude": {
+    "**/target/**": true,
+    "**/.bloop/**": true,
+    "**/spark-warehouse/**": true
+  },
+  "files.exclude": {
+    "**/target": true,
+    "**/.bloop": true,
+    "**/.metals": true
+  }
+}

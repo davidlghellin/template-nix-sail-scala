@@ -1,0 +1,101 @@
+ciudad,habitantes,provincia,comunidad_autonoma,superficie_km2
+Madrid,3223334,Madrid,Comunidad de Madrid,604.3
+Barcelona,1620343,Barcelona,Cataluña,101.4
+Valencia,791413,Valencia,Comunidad Valenciana,134.6
+Sevilla,688711,Sevilla,Andalucía,140.8
+Zaragoza,674997,Zaragoza,Aragón,973.8
+Málaga,574654,Málaga,Andalucía,395.0
+Murcia,453258,Murcia,Región de Murcia,881.9
+Palma,416065,Islas Baleares,Islas Baleares,208.6
+Las Palmas de Gran Canaria,379925,Las Palmas,Canarias,100.5
+Bilbao,346843,Vizcaya,País Vasco,41.6
+Alicante,337482,Alicante,Comunidad Valenciana,201.3
+Córdoba,325708,Córdoba,Andalucía,1254.2
+Valladolid,298866,Valladolid,Castilla y León,197.9
+Vigo,295364,Pontevedra,Galicia,109.1
+Gijón,271843,Asturias,Principado de Asturias,181.6
+Hospitalet de Llobregat,264923,Barcelona,Cataluña,12.4
+A Coruña,245711,A Coruña,Galicia,37.8
+Vitoria-Gasteiz,253672,Álava,País Vasco,276.8
+Granada,232462,Granada,Andalucía,88.0
+Elche,232517,Alicante,Comunidad Valenciana,326.1
+Oviedo,220567,Asturias,Principado de Asturias,186.7
+Badalona,223166,Barcelona,Cataluña,21.2
+Cartagena,216451,Murcia,Región de Murcia,558.3
+Terrassa,223627,Barcelona,Cataluña,70.2
+Jerez de la Frontera,212879,Cádiz,Andalucía,1188.1
+Sabadell,216520,Barcelona,Cataluña,37.8
+Santa Cruz de Tenerife,209194,Santa Cruz de Tenerife,Canarias,150.6
+Móstoles,209184,Madrid,Comunidad de Madrid,45.4
+Alcalá de Henares,203924,Madrid,Comunidad de Madrid,87.7
+Pamplona,203418,Navarra,Comunidad Foral de Navarra,25.1
+Fuenlabrada,198560,Madrid,Comunidad de Madrid,39.2
+Almería,198533,Almería,Andalucía,296.2
+Leganés,190852,Madrid,Comunidad de Madrid,43.1
+San Sebastián,188240,Guipúzcoa,País Vasco,60.9
+Getafe,183949,Madrid,Comunidad de Madrid,78.7
+Burgos,178966,Burgos,Castilla y León,107.1
+Santander,172539,Cantabria,Cantabria,34.8
+Albacete,173329,Albacete,Castilla-La Mancha,1126.9
+Castellón de la Plana,171728,Castellón,Comunidad Valenciana,108.8
+Alcorcón,170514,Madrid,Comunidad de Madrid,33.7
+San Cristóbal de La Laguna,157815,Santa Cruz de Tenerife,Canarias,102.3
+Logroño,151113,La Rioja,La Rioja,79.6
+Badajoz,150984,Badajoz,Extremadura,1470.4
+Salamanca,144228,Salamanca,Castilla y León,39.3
+Huelva,143663,Huelva,Andalucía,151.3
+Marbella,147633,Málaga,Andalucía,117.3
+Lleida,141271,Lleida,Cataluña,211.7
+Tarragona,134515,Tarragona,Cataluña,62.8
+León,124303,León,Castilla y León,39.0
+Cádiz,116979,Cádiz,Andalucía,12.1
+Jaén,112999,Jaén,Andalucía,424.3
+Ourense,105636,Ourense,Galicia,84.6
+Algeciras,122982,Cádiz,Andalucía,85.9
+Reus,107211,Tarragona,Cataluña,52.8
+Telde,102647,Las Palmas,Canarias,102.4
+Barakaldo,100435,Vizcaya,País Vasco,26.8
+Lugo,98761,Lugo,Galicia,329.8
+Santiago de Compostela,98179,A Coruña,Galicia,220.0
+Girona,103369,Girona,Cataluña,39.1
+Cáceres,96255,Cáceres,Extremadura,1750.3
+Lorca,94404,Murcia,Región de Murcia,1675.2
+Torrejón de Ardoz,132689,Madrid,Comunidad de Madrid,21.7
+Parla,132365,Madrid,Comunidad de Madrid,24.5
+Mataró,129661,Barcelona,Cataluña,22.5
+Dos Hermanas,136463,Sevilla,Andalucía,160.5
+Santa Coloma de Gramenet,120824,Barcelona,Cataluña,7.0
+Alcobendas,118314,Madrid,Comunidad de Madrid,45.0
+Cornellà de Llobregat,89066,Barcelona,Cataluña,7.0
+Avilés,78182,Asturias,Principado de Asturias,26.8
+Pontevedra,83260,Pontevedra,Galicia,118.3
+Palencia,78892,Palencia,Castilla y León,94.7
+Torrevieja,84838,Alicante,Comunidad Valenciana,71.4
+Benidorm,69738,Alicante,Comunidad Valenciana,38.5
+Orihuela,77414,Alicante,Comunidad Valenciana,365.4
+Roquetas de Mar,98107,Almería,Andalucía,59.8
+Toledo,85449,Toledo,Castilla-La Mancha,232.1
+Ciudad Real,75504,Ciudad Real,Castilla-La Mancha,285.0
+El Ejido,84144,Almería,Andalucía,227.1
+Gandía,75798,Valencia,Comunidad Valenciana,60.8
+San Fernando,95979,Cádiz,Andalucía,32.4
+Chiclana de la Frontera,86866,Cádiz,Andalucía,206.5
+Manresa,78046,Barcelona,Cataluña,41.7
+Rubí,79007,Barcelona,Cataluña,32.3
+Vilanova i la Geltrú,66891,Barcelona,Cataluña,34.0
+Arrecife,63930,Las Palmas,Canarias,22.7
+Majadahonda,72791,Madrid,Comunidad de Madrid,38.5
+Vélez-Málaga,83056,Málaga,Andalucía,157.9
+Pozuelo de Alarcón,87930,Madrid,Comunidad de Madrid,43.2
+Sanlúcar de Barrameda,69727,Cádiz,Andalucía,174.3
+Viladecans,67642,Barcelona,Cataluña,20.0
+El Puerto de Santa María,89068,Cádiz,Andalucía,159.3
+Granollers,61853,Barcelona,Cataluña,14.9
+Mollet del Vallès,52124,Barcelona,Cataluña,10.8
+Ferrol,66065,A Coruña,Galicia,82.6
+Benalmádena,71517,Málaga,Andalucía,27.0
+Mijas,88847,Málaga,Andalucía,148.8
+Fuengirola,82333,Málaga,Andalucía,10.4
+Estepona,73531,Málaga,Andalucía,137.0
+Torremolinos,69389,Málaga,Andalucía,20.2
+Rincón de la Victoria,49632,Málaga,Andalucía,27.5

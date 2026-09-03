@@ -71,6 +71,11 @@ jobs:
               - 'flake.lock'
               - '.scalafmt.conf'
               - 'scripts/**'
+              # The data the specs read, and the logging config that decides whether
+              # a green run is quiet. Neither is a .scala file, and leaving them out
+              # meant a changed fixture skipped the suites that read it.
+              - 'resources/**'
+              - '**/src/*/resources/**'
               - '.github/workflows/**'
 
   test:
@@ -85,6 +90,9 @@ jobs:
         # The same tests against both engines: classic Spark on the JVM and
         # Sail over Spark Connect. That the two agree is the whole point of this
         # template, so neither may be left unrun.
+        #
+        # One compilation, two runs: the backend is a run-time choice now, so
+        # this is `SPARK_BACKEND` rather than two sbt projects.
         backend: [classic, connect]
     steps:
       - uses: actions/checkout@v7
@@ -103,7 +111,9 @@ jobs:
         with:
           path: .venv-sail
           key: sail-${{ runner.os }}-${{ hashFiles('versions.json') }}
-      - run: nix develop --command sbt -batch ${{ matrix.backend }}/test
+      - run: nix develop --command sbt -batch test
+        env:
+          SPARK_BACKEND: ${{ matrix.backend }}
 
   format:
     name: format
