@@ -9,9 +9,9 @@ import devel0pez.etl.jobs.Jobs
   * the current environment resolves to:
   *
   * {{{
-  * sbt "classic/runMain devel0pez.etl.GraphMain"
-  * sbt "classic/runMain devel0pez.etl.GraphMain --mermaid"
-  * ETL_ENV=pro ETL_DATA_ROOT=s3://bucket/gold sbt "classic/runMain devel0pez.etl.GraphMain"
+  * sbt "etl/runMain devel0pez.etl.GraphMain"
+  * sbt "etl/runMain devel0pez.etl.GraphMain --mermaid"
+  * ETL_ENV=pro ETL_DATA_ROOT=s3://bucket/gold sbt "etl/runMain devel0pez.etl.GraphMain"
   * }}}
   */
 object GraphMain {

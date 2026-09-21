@@ -56,7 +56,12 @@ final class ConcurrencySpec extends SparkSuite {
       try {
         val work = Future.sequence((1 to 4).map { scale =>
           Future {
-            peak.updateAndGet(_ max inFlight.incrementAndGet())
+            // The increment happens once and outside, on purpose:
+            // `updateAndGet` re-runs its function when the CAS loses a race, so
+            // a side effect in there can fire more than once per task and
+            // corrupt the very count this test is measuring.
+            val now = inFlight.incrementAndGet()
+            peak.updateAndGet(_ max now)
             try query(scale)
             finally inFlight.decrementAndGet()
           }
