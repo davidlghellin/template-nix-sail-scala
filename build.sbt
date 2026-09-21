@@ -18,7 +18,7 @@ def versionOf(key: String): String = {
 
 val sparkVersion = versionOf("spark")
 val backend = sys.env.getOrElse("SPARK_BACKEND", "classic")
-val scalaTestVersion = "3.2.19"
+val scalaTestVersion = "3.2.20"
 
 // Spark and Arrow reach into JDK internals by reflection, sealed since Java 17.
 // `spark-submit` adds these for you; sbt does not, and the first `collect()`
