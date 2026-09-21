@@ -86,7 +86,12 @@ lazy val common = Seq(
   },
   run / fork := true,
   run / javaOptions ++= jvmOptions,
-  scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked", "-Xlint")
+  // `-Xlint` only prints; `-Werror` is what makes CI fail on a warning. Without
+  // it an unused import or a deprecation scrolled past in a green build, and
+  // neither scalafmt (layout only) nor anything else was looking.
+  scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked", "-Xlint", "-Werror"),
+  // Except in the REPL, where an import you have not used yet is the normal state.
+  Compile / console / scalacOptions --= Seq("-Werror", "-Xlint")
 )
 
 /** Compile-time translation of a typed lambda into a `Column`.
@@ -101,7 +106,7 @@ lazy val macros = (project in file("macros"))
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
       "org.apache.spark" %% "spark-sql-api" % sparkVersion % Provided
     ),
-    scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
+    scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked", "-Werror")
   )
 
 /** The domain, and every spec that runs against **both** engines. */

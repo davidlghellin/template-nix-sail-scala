@@ -72,7 +72,9 @@ final class PracticeSpec extends SparkSuite {
       sameWork(
         (1 to 4).foldLeft(facts)((df, i) => df.withColumn(s"c$i", col("amount") + i)),
         facts.select(
-          facts.columns.map(col) ++ (1 to 4).map(i => (col("amount") + i).as(s"c$i")): _*
+          facts.columns.toIndexedSeq.map(col) ++ (1 to 4).map(i =>
+            (col("amount") + i).as(s"c$i")
+          ): _*
         )
       )
     }

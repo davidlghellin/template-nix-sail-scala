@@ -1,7 +1,5 @@
 package devel0pez
 
-import java.sql.Timestamp
-
 import org.apache.spark.sql.functions.col
 
 import devel0pez.macros.Expr

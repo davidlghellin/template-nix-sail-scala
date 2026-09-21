@@ -42,8 +42,6 @@ final class ClosureGuardSpec extends SparkSuite {
     }
 
     "a typed closure is refused before it reaches the server" in {
-      val session = guarded
-      import session.implicits._
 
       val refused = intercept[ClosureNotSupported] {
         guarded.range(10).filter(_ > 5L).count()
@@ -58,8 +56,6 @@ final class ClosureGuardSpec extends SparkSuite {
     }
 
     "and the message it replaces named neither" in {
-      val session = spark
-      import session.implicits._
 
       // The same query on the ungarded session, for the comparison the guard
       // exists to make. This is what Sail says today.
@@ -74,8 +70,6 @@ final class ClosureGuardSpec extends SparkSuite {
   "what the guard deliberately does not do" - {
 
     "is block explain, which is how you look at the problem" in {
-      val session = guarded
-      import session.implicits._
 
       // `AnalyzePlanRequest` carries the offending plan too. Guarding it would
       // mean the one tool for inspecting a bad plan refused to run on bad

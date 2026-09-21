@@ -67,8 +67,6 @@ final class WirePlanSpec extends SparkSuite {
     }
 
     "carries a typed closure as an opaque Scala UDF instead" in {
-      val session = spark
-      import session.implicits._
 
       val condition = WirePlan.of(base.filter(_ > 5L)).getRoot.getFilter.getCondition
 
@@ -84,8 +82,6 @@ final class WirePlanSpec extends SparkSuite {
   "the asymmetry ClosureSpec observes" - {
 
     "is a plan id on the wildcard, and filter attaches one" in {
-      val session = spark
-      import session.implicits._
 
       val star = onlyUdf(base.filter(_ > 5L)).getUnresolvedStar
 
@@ -97,9 +93,10 @@ final class WirePlanSpec extends SparkSuite {
     }
 
     "and groupByKey does not, which is why its message is the good one" in {
+
+      // This one does need them: `groupByKey` asks for an Encoder[Long].
       val session = spark
       import session.implicits._
-
       val star = onlyUdf(base.groupByKey(v => v % 2).count()).getUnresolvedStar
 
       // Same closure, same UDF, no plan id. The wildcard resolves, execution
@@ -113,8 +110,6 @@ final class WirePlanSpec extends SparkSuite {
   "a closure found in the request" - {
 
     "names the operation and the line of code that wrote it" in {
-      val session = spark
-      import session.implicits._
 
       val found = WirePlan.closuresIn(base.filter(_ > 5L))
 
