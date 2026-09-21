@@ -22,9 +22,11 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    # Pinned to commit SHAs, not tags: this job holds a write token, and a tag
+    # can be moved. Dependabot still bumps them and keeps the version comment.
     steps:
-      - uses: actions/checkout@v7
-      - uses: scala-steward-org/scala-steward-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: scala-steward-org/scala-steward-action@6162b21b93d4be314a61ce0462fd026630132fee # v2.96.0
         with:
           # With the default GITHUB_TOKEN, the PRs the bot opens do NOT trigger
           # workflows, so they would land without CI. With a PAT in the
