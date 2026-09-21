@@ -65,7 +65,7 @@ object Quality {
         row_number().over(Window.partitionBy(col(keyCol)).orderBy(col(rowId).asc))
       )
       .filter(col(rowNumber) === 1)
-      .select(original: _*)
+      .select(original.toIndexedSeq: _*)
       .as(encoder)
   }
 }

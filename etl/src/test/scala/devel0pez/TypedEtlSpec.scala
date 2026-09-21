@@ -3,7 +3,6 @@ package devel0pez
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.IntegerType
 
 /** A typed ETL end to end: read a table as a `Dataset[T]`, join, aggregate, and insert into another
