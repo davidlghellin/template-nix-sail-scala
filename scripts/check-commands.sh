@@ -30,7 +30,7 @@ done
 echo
 echo "Commands that are cheap enough to run"
 
-# `c` — compiles both backends and the macro project.
+# `c` — compiles every module.
 if c >/dev/null 2>&1; then ok "c" "compiles"; else bad "c" "compile failed"; fi
 
 # `fc` — the formatting check CI runs.
