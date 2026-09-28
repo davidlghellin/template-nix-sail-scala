@@ -40,7 +40,7 @@ final class WirePlanSpec extends SparkSuite {
       import scala.jdk.CollectionConverters._
       here ++ node.getAllFields.asScala.values.flatMap {
         case child: org.sparkproject.com.google.protobuf.Message => walk(child)
-        case repeated: java.util.List[_] =>
+        case repeated: java.util.List[_]                         =>
           repeated.asScala.flatMap {
             case child: org.sparkproject.com.google.protobuf.Message => walk(child)
             case _                                                   => Seq.empty

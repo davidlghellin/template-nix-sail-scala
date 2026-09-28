@@ -67,7 +67,7 @@ object WirePlan {
         case _ => ()
       }
       node.getAllFields.asScala.values.foreach {
-        case child: Message => visit(child)
+        case child: Message              => visit(child)
         case repeated: java.util.List[_] =>
           repeated.asScala.foreach {
             case child: Message => visit(child)

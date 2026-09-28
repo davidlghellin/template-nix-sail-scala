@@ -238,7 +238,7 @@ private[macros] object ExprMacro {
 
     val (param, body) = unwrap(lambda) match {
       case Function(List(ValDef(_, name, _, _)), b) => (name, unwrap(b))
-      case other =>
+      case other                                    =>
         c.abort(
           c.enclosingPosition,
           s"a lambda of one argument is required, got: ${showCode(other)}"
